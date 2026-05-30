@@ -22,15 +22,16 @@ def classify_intake(intake: Intake, repository_root: Path) -> Classification:
     request = intake.normalized_request.lower()
 
     task_type = "patch"
-    for keyword in rules["task_type"]["debug_keywords"]:
-        if keyword in request:
-            task_type = "debug"
+    for candidate in rules["task_type"]["ordered_rules"]:
+        if any(keyword in request for keyword in candidate["keywords"]):
+            task_type = candidate["task_type"]
             break
 
     project_hint = None
     provider_hint = None
     environment_hint = None
-    for project_name, project_data in rules["projects"].items():
+    for project_name in rules["project_order"]:
+        project_data = rules["projects"][project_name]
         aliases = [project_name, *project_data["aliases"]]
         if any(alias in request for alias in aliases):
             project_hint = project_name

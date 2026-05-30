@@ -25,7 +25,7 @@ def resolve_project(classification: Classification, repository_root: Path) -> Re
     environment = classification.environment_hint or project["environment"]
 
     return ResolvedProject(
-        name=project_name,
+        name=project_name if project_name in rules["projects"] else rules["default_project"],
         provider=provider,
         environment=environment,
     )

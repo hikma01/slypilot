@@ -67,16 +67,24 @@ def test_documentation_inventory():
 
 def test_initial_detection_dry_run():
     root = Path(__file__).resolve().parents[1]
-    result = subprocess.run(
-        [sys.executable, "-m", "slypilot.cli", "corrige bug upload SlyScan", "--dry-run"],
-        cwd=root,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    cases = [
+        ("corrige bug upload SlyScan", {"task_type": "debug", "project": "slyscan"}),
+        ("analyse architecture SlyPilot", {"task_type": "architecture", "project": "slypilot"}),
+        ("explique problème login Hermes", {"task_type": "explain", "project": "hermes"}),
+        ("corrige erreur API SlyScan", {"task_type": "debug", "project": "slyscan"}),
+    ]
 
-    payload = json.loads(result.stdout)
-    assert payload["task_type"] == "debug"
-    assert payload["project"] == "slyscan"
-    assert payload["provider"] == "deepseek"
-    assert payload["environment"] == "local"
+    for request, expected in cases:
+        result = subprocess.run(
+            [sys.executable, "-m", "slypilot.cli", request, "--dry-run"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        payload = json.loads(result.stdout)
+        assert payload["task_type"] == expected["task_type"]
+        assert payload["project"] == expected["project"]
+        assert payload["provider"] == "deepseek"
+        assert payload["environment"] == "local"

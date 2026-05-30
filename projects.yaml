@@ -1,5 +1,11 @@
 default_project: slyscan
 projects:
+  slypilot:
+    provider: deepseek
+    environment: local
+    aliases:
+      - SlyPilot
+      - slypilot
   slyscan:
     provider: deepseek
     environment: local
@@ -7,3 +13,9 @@ projects:
       - SlyScan
       - slyscan
       - SlyScan V2
+  hermes:
+    provider: deepseek
+    environment: local
+    aliases:
+      - Hermes
+      - hermes

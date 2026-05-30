@@ -1,11 +1,32 @@
 task_type:
-  debug_keywords:
-    - corrige bug
-    - bug
-    - debug
-    - erreur
-    - incident
+  ordered_rules:
+    - task_type: architecture
+      keywords:
+        - architecture
+        - archi
+        - design review
+        - revue architecture
+    - task_type: explain
+      keywords:
+        - explique
+        - explanation
+        - explain
+        - why
+        - pourquoi
+    - task_type: debug
+      keywords:
+        - corrige bug
+        - bug
+        - debug
+        - erreur
+        - incident
 projects:
+  slypilot:
+    provider: deepseek
+    environment: local
+    aliases:
+      - SlyPilot
+      - slypilot
   slyscan:
     provider: deepseek
     environment: local
@@ -13,3 +34,9 @@ projects:
       - SlyScan
       - slyscan
       - SlyScan V2
+  hermes:
+    provider: deepseek
+    environment: local
+    aliases:
+      - Hermes
+      - hermes
