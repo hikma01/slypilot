@@ -55,6 +55,7 @@ def test_documentation_inventory():
         "06_DEVELOPMENT_ROADMAP.md",
         "07_TESTING_STRATEGY.md",
         "08_DECISIONS_LOG.md",
+        "09_METRICS_V1.md",
     ]
 
     for name in expected_docs:
