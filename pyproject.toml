@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "slypilot"
+version = "0.1.0"
+description = "SlyPilot V1 foundation for contextual reduction and task packets"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "SlyProjet" }]
+dependencies = []
+
+[project.scripts]
+slypilot = "slypilot.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+include = ["slypilot*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
