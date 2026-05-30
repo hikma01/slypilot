@@ -1,0 +1,15 @@
+task_type:
+  debug_keywords:
+    - corrige bug
+    - bug
+    - debug
+    - erreur
+    - incident
+projects:
+  slyscan:
+    provider: deepseek
+    environment: local
+    aliases:
+      - SlyScan
+      - slyscan
+      - SlyScan V2

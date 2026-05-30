@@ -1,0 +1,9 @@
+default_project: slyscan
+projects:
+  slyscan:
+    provider: deepseek
+    environment: local
+    aliases:
+      - SlyScan
+      - slyscan
+      - SlyScan V2
