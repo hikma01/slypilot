@@ -6,6 +6,8 @@
         {"path": "docs/01_ARCHITECTURE.md", "task_types": ["architecture"], "weight": 90, "lines": 120, "reason": "task_relevance=critical"},
         {"path": "docs/02_TASK_PACKET_STANDARD.md", "task_types": ["debug", "patch", "review", "docs"], "weight": 80, "lines": 140, "reason": "task_relevance=high"},
         {"path": "docs/03_ARCHI_OPS_INDEX.md", "task_types": ["architecture", "debug", "patch", "review", "docs"], "weight": 70, "lines": 80, "reason": "task_relevance=structural"},
+        {"path": "docs/11_CONTEXT_SELECTION_CONTRACT.md", "task_types": ["architecture", "debug", "patch", "review", "docs"], "weight": 75, "lines": 80, "reason": "task_relevance=contract_support"},
+        {"path": "docs/10_ARCHIOPS_INTEGRATION_AUDIT.md", "task_types": ["architecture", "debug", "patch", "review", "docs"], "weight": 65, "lines": 120, "reason": "task_relevance=integration_audit"},
         {"path": "docs/00_PROJECT_OVERVIEW.md", "task_types": ["explain", "docs"], "weight": 60, "lines": 60, "reason": "task_relevance=overview"},
         {"path": "README.md", "task_types": ["architecture", "docs"], "weight": 50, "lines": 80, "reason": "task_relevance=entrypoint"}
       ],
@@ -17,20 +19,25 @@
     },
     "slyscan": {
       "files": [
-        {"path": "docs/03_ARCHI_OPS_INDEX.md", "task_types": ["architecture", "debug", "patch", "review", "docs"], "weight": 85, "lines": 100, "reason": "task_relevance=structural"},
+        {"path": "apps/api/src/routes/upload.mjs", "task_types": ["debug", "patch"], "weight": 100, "lines": 60, "reason": "task_relevance=critical_runtime"},
+        {"path": "apps/api/src/upload.service.mjs", "task_types": ["debug", "patch"], "weight": 95, "lines": 70, "reason": "task_relevance=service_boundary"},
+        {"path": "apps/api/src/storage/storage-adapter.mjs", "task_types": ["debug", "patch"], "weight": 90, "lines": 60, "reason": "task_relevance=storage_boundary"},
+        {"path": "apps/api/src/validation/upload-validator.mjs", "task_types": ["debug", "patch"], "weight": 88, "lines": 120, "reason": "task_relevance=validation_boundary"},
+        {"path": "apps/api/src/slyscan-db.mjs", "task_types": ["debug", "patch", "architecture"], "weight": 85, "lines": 180, "reason": "task_relevance=data_truth"},
+        {"path": "docs/03_ARCHI_OPS_INDEX.md", "task_types": ["architecture", "debug", "patch", "review", "docs"], "weight": 45, "lines": 80, "reason": "task_relevance=structural_support"},
         {"path": "docs/01_ARCHITECTURE.md", "task_types": ["architecture"], "weight": 70, "lines": 100, "reason": "task_relevance=critical"}
       ],
       "maps": [
         {"path": "Documents/ARCHIOPS/runtime-map.md", "task_types": ["debug", "patch"], "weight": 100, "reason": "runtime_reset"},
-        {"path": "Documents/ARCHIOPS/dependency-map.md", "task_types": ["debug", "patch", "architecture"], "weight": 90, "reason": "dependency_chain"},
-        {"path": "Documents/ARCHIOPS/db-map.md", "task_types": ["debug", "patch"], "weight": 80, "reason": "data_truth"},
-        {"path": "Documents/ARCHIOPS/semantic-index.md", "task_types": ["debug", "patch", "architecture"], "weight": 70, "reason": "repeat_incident_surface"}
+        {"path": "Documents/ARCHIOPS/dependency-map.md", "task_types": ["debug", "patch", "architecture"], "weight": 95, "reason": "dependency_chain"},
+        {"path": "Documents/ARCHIOPS/db-map.md", "task_types": ["debug", "patch"], "weight": 90, "reason": "data_truth"},
+        {"path": "Documents/ARCHIOPS/semantic-index.md", "task_types": ["debug", "patch", "architecture"], "weight": 75, "reason": "repeat_incident_surface"}
       ]
     },
     "hermes": {
       "files": [
         {"path": "docs/00_PROJECT_OVERVIEW.md", "task_types": ["explain", "docs"], "weight": 90, "lines": 60, "reason": "task_relevance=overview"},
-        {"path": "docs/04_SECURITY.md", "task_types": ["architecture", "debug", "patch", "review", "docs"], "weight": 85, "lines": 100, "reason": "task_relevance=security"},
+        {"path": "docs/04_SECURITY.md", "task_types": ["explain", "architecture", "debug", "patch", "review", "docs"], "weight": 98, "lines": 100, "reason": "task_relevance=security_and_auth"},
         {"path": "README.md", "task_types": ["explain", "architecture", "docs"], "weight": 70, "lines": 80, "reason": "task_relevance=entrypoint"}
       ],
       "maps": [
