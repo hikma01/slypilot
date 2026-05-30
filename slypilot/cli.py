@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+from slypilot.adapters.deepseek_adapter import DeepSeekAdapterError, run_deepseek_live
 from slypilot.intake import build_intake
 from slypilot.classifier import classify_intake
 from slypilot.project_resolver import resolve_project
@@ -20,6 +21,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="slypilot")
     parser.add_argument("request", help="raw user request to classify")
     parser.add_argument("--dry-run", action="store_true", help="print the initial detection result")
+    parser.add_argument("--live-run", action="store_true", help="send the generated packet to the provider")
     args = parser.parse_args(argv)
 
     root = _repo_root()
@@ -50,6 +52,33 @@ def main(argv: list[str] | None = None) -> int:
         print()
         print("--- TASK PACKET ---")
         print(packet.content)
+    elif args.live_run:
+        packet = build_task_packet(intake, classification, project, root)
+        print("SLYPILOT LIVE RUN")
+        print()
+        print("Packet:")
+        print(f"- {packet.packet_path.relative_to(root)}")
+        print()
+        try:
+            response = run_deepseek_live(packet)
+        except DeepSeekAdapterError as exc:
+            print("Provider error:")
+            print(f"- {exc}")
+            return 1
+        append_history(
+            root / "slypilot" / "storage" / "history.jsonl",
+            packet,
+            provider=response.provider,
+            status=response.status,
+            response_tokens=response.response_tokens,
+        )
+        print("Provider response:")
+        print(response.response_text)
+        print()
+        print("Response metrics:")
+        print(f"- provider: {response.provider}")
+        print(f"- model: {response.model}")
+        print(f"- response_tokens: {response.response_tokens}")
     else:
         result = {
             "task_type": classification.task_type,

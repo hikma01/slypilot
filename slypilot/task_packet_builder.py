@@ -272,17 +272,25 @@ def _render_packet(
     return "\n".join(body_lines)
 
 
-def append_history(history_path: Path, packet: BuiltPacket) -> None:
+def append_history(
+    history_path: Path,
+    packet: BuiltPacket,
+    provider: str | None = None,
+    status: str = "packet_generated",
+    response_tokens: int | None = None,
+) -> None:
     history_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "task_id": packet.task_id,
         "project": packet.metadata["project"],
         "task_type": packet.metadata["task_type"],
-        "provider": packet.metadata["provider"],
+        "provider": provider or packet.metadata["provider"],
         "environment": packet.metadata["environment"],
         "dry_run": packet.metadata["dry_run"],
         "packet_path": str(packet.packet_path.relative_to(history_path.parents[1])),
-        "status": "packet_generated",
+        "status": status,
     }
+    if response_tokens is not None:
+        payload["response_tokens"] = response_tokens
     with history_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
