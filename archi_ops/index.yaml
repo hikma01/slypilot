@@ -36,9 +36,9 @@
     },
     "hermes": {
       "files": [
-        {"path": "docs/00_PROJECT_OVERVIEW.md", "task_types": ["explain", "docs"], "weight": 90, "lines": 60, "reason": "task_relevance=overview"},
-        {"path": "docs/04_SECURITY.md", "task_types": ["explain", "architecture", "debug", "patch", "review", "docs"], "weight": 98, "lines": 100, "reason": "task_relevance=security_and_auth"},
-        {"path": "README.md", "task_types": ["explain", "architecture", "docs"], "weight": 70, "lines": 80, "reason": "task_relevance=entrypoint"}
+        {"path": "docs/00_PROJECT_OVERVIEW.md", "task_types": ["explain", "architecture", "docs"], "weight": 90, "lines": 40, "reason": "task_relevance=overview_and_auth_context"},
+        {"path": "docs/04_SECURITY.md", "task_types": ["explain", "architecture", "debug", "patch", "review", "docs"], "weight": 98, "lines": 90, "reason": "task_relevance=security_and_auth"},
+        {"path": "README.md", "task_types": ["explain", "architecture", "debug", "docs"], "weight": 80, "lines": 60, "reason": "task_relevance=entrypoint_and_auth_support"}
       ],
       "maps": [
         {"path": "archi_ops/index.md", "task_types": ["explain", "architecture", "docs"], "weight": 100, "reason": "entrypoint"},

@@ -17,3 +17,4 @@
 - Added loader-focused tests using the Python standard library.
 - Relevance validation showed strong architecture results but weak SlyScan bug coverage.
 - Provider integration remains deferred until the index is strengthened.
+- Hermes security validation confirmed the issue was missing coverage plus budget representation.
