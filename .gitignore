@@ -6,3 +6,5 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+slypilot/packets/generated/
+slypilot/storage/history.jsonl

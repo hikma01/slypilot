@@ -1,9 +1,24 @@
 # ARCHI OPS Index
 
-Minimal placeholder index for the repository foundation.
+Minimal structural index for SlyPilot V1.
 
-- repo map: pending
-- critical files: pending
-- dependency graph: pending
-- negative context: pending
+## Summary
 
+- repo map: minimal
+- critical files: minimal
+- dependency graph: deferred
+- negative context: explicit
+
+## Negative Context
+
+- no sqlite
+- no provider call
+- no multi-agent
+- no dashboard
+- no runtime routing
+- no global scan
+
+## Known Issues
+
+- packet builder remains intentionally simple
+- selection is deterministic and non-intelligent in V1

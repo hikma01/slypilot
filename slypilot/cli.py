@@ -9,6 +9,7 @@ from pathlib import Path
 from slypilot.intake import build_intake
 from slypilot.classifier import classify_intake
 from slypilot.project_resolver import resolve_project
+from slypilot.task_packet_builder import append_history, build_task_packet
 
 
 def _repo_root() -> Path:
@@ -26,16 +27,36 @@ def main(argv: list[str] | None = None) -> int:
     classification = classify_intake(intake, root)
     project = resolve_project(classification, root)
 
-    result = {
-        "task_type": classification.task_type,
-        "project": project.name,
-        "provider": project.provider,
-        "environment": project.environment,
-    }
-
     if args.dry_run:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        packet = build_task_packet(intake, classification, project, root)
+        append_history(root / "slypilot" / "storage" / "history.jsonl", packet)
+        print("SLYPILOT DRY RUN")
+        print()
+        print("Detection:")
+        print(f"- task_type: {classification.task_type}")
+        print(f"- project: {project.name}")
+        print(f"- provider: {project.provider}")
+        print(f"- environment: {project.environment}")
+        print()
+        print("Generated Packet:")
+        print(f"- {packet.packet_path.relative_to(root)}")
+        print()
+        print("Warnings:")
+        if packet.warnings:
+            for warning in packet.warnings:
+                print(f"- {warning}")
+        else:
+            print("- none")
+        print()
+        print("--- TASK PACKET ---")
+        print(packet.content)
     else:
+        result = {
+            "task_type": classification.task_type,
+            "project": project.name,
+            "provider": project.provider,
+            "environment": project.environment,
+        }
         print(json.dumps(result, ensure_ascii=False))
     return 0
 

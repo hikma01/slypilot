@@ -15,3 +15,11 @@
 - Proof: `load_rules()` produced a bogus `aliases` project entry and omitted proper project ordering.
 - Fix: parse the `task_type` and `projects` blocks explicitly by indentation and section, then resolve project aliases from the correct project map.
 - Prevention rule: when rules are file-driven, verify the parsed in-memory structure before trusting classification output.
+
+## 2026-05-30 - Packet IDs collided within the same second
+
+- Symptom: multiple dry-run commands generated the same packet filename and overwrote each other.
+- Root cause: the packet identifier used second-level timestamps only.
+- Proof: three runs executed in rapid succession produced the same `task_YYYYMMDD_HHMMSS.md` name.
+- Fix: include microseconds in the task identifier.
+- Prevention rule: any file-backed dry-run artifact must have collision-resistant naming from the start.
