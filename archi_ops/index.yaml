@@ -26,6 +26,17 @@
         {"path": "Documents/ARCHIOPS/db-map.md", "task_types": ["debug", "patch"], "weight": 80, "reason": "data_truth"},
         {"path": "Documents/ARCHIOPS/semantic-index.md", "task_types": ["debug", "patch", "architecture"], "weight": 70, "reason": "repeat_incident_surface"}
       ]
+    },
+    "hermes": {
+      "files": [
+        {"path": "docs/00_PROJECT_OVERVIEW.md", "task_types": ["explain", "docs"], "weight": 90, "lines": 60, "reason": "task_relevance=overview"},
+        {"path": "docs/04_SECURITY.md", "task_types": ["architecture", "debug", "patch", "review", "docs"], "weight": 85, "lines": 100, "reason": "task_relevance=security"},
+        {"path": "README.md", "task_types": ["explain", "architecture", "docs"], "weight": 70, "lines": 80, "reason": "task_relevance=entrypoint"}
+      ],
+      "maps": [
+        {"path": "archi_ops/index.md", "task_types": ["explain", "architecture", "docs"], "weight": 100, "reason": "entrypoint"},
+        {"path": "docs/11_CONTEXT_SELECTION_CONTRACT.md", "task_types": ["explain", "architecture", "debug", "patch", "review", "docs"], "weight": 80, "reason": "contract"}
+      ]
     }
   }
 }

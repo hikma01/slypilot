@@ -108,6 +108,66 @@ class ArchiOpsLoaderTests(unittest.TestCase):
                 self.assertIn("selected_lines_count:", content)
                 self.assertIn("files_excluded_count:", content)
 
+    def test_relevance_bench_compares_human_vs_loader(self) -> None:
+        cases = [
+            (
+                "corrige bug upload SlyScan",
+                "slyscan",
+                "debug",
+                "minimal",
+                {
+                    "docs/03_ARCHI_OPS_INDEX.md",
+                    "docs/07_TESTING_STRATEGY.md",
+                    "docs/08_DECISIONS_LOG.md",
+                    "docs/09_METRICS_V1.md",
+                },
+            ),
+            (
+                "analyse architecture SlyPilot",
+                "slypilot",
+                "architecture",
+                "standard",
+                {
+                    "docs/01_ARCHITECTURE.md",
+                    "README.md",
+                    "docs/03_ARCHI_OPS_INDEX.md",
+                    "docs/11_CONTEXT_SELECTION_CONTRACT.md",
+                },
+            ),
+            (
+                "explique problème login Hermes",
+                "hermes",
+                "explain",
+                "minimal",
+                {
+                    "docs/00_PROJECT_OVERVIEW.md",
+                    "README.md",
+                    "docs/04_SECURITY.md",
+                },
+            ),
+        ]
+
+        report = []
+        for request, project_id, task_type, profile, expected_files in cases:
+            with self.subTest(request=request):
+                result = load_archi_ops_context(self.root, project_id, task_type, profile)
+                selected_files = {item.path for item in result.files}
+                matched_files = selected_files & expected_files
+                precision = len(matched_files) / len(expected_files)
+                report.append(
+                    {
+                        "request": request,
+                        "expected_files_count": len(expected_files),
+                        "matched_files_count": len(matched_files),
+                        "selection_precision": round(precision, 4),
+                    }
+                )
+                self.assertGreaterEqual(len(selected_files), 1)
+
+        # Store a human-readable signal for quick inspection when the bench is rerun.
+        self.assertEqual(len(report), 3)
+        self._relevance_report = report  # type: ignore[attr-defined]
+
 
 if __name__ == "__main__":
     unittest.main()

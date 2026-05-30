@@ -15,3 +15,5 @@
 - Added packet metrics for selected files, selected lines, and excluded files.
 - Kept `intent_keywords` out of V1 selection by explicit decision.
 - Added loader-focused tests using the Python standard library.
+- Relevance validation showed strong architecture results but weak SlyScan bug coverage.
+- Provider integration remains deferred until the index is strengthened.
