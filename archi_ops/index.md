@@ -1,6 +1,6 @@
 # ARCHI OPS Index
 
-Minimal structural index for SlyPilot V1.
+Minimal structured-index for SlyPilot V1.
 
 ## Summary
 
@@ -8,6 +8,7 @@ Minimal structural index for SlyPilot V1.
 - critical files: minimal
 - dependency graph: deferred
 - negative context: explicit
+- structured-index: preferred term
 
 ## Negative Context
 
@@ -22,3 +23,4 @@ Minimal structural index for SlyPilot V1.
 
 - packet builder remains intentionally simple
 - selection is deterministic and non-intelligent in V1
+- stale index detection is still documentary only
