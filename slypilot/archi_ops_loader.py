@@ -1,0 +1,131 @@
+"""Deterministic ARCHI OPS context selection for SlyPilot V1."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import json
+from pathlib import Path
+
+
+@dataclass(frozen=True)
+class ContextProfile:
+    name: str
+    max_files: int
+    max_lines: int
+
+
+@dataclass(frozen=True)
+class SelectionItem:
+    path: str
+    reason: str
+    content: str
+    lines: int
+
+
+@dataclass(frozen=True)
+class LoaderResult:
+    files: list[SelectionItem]
+    maps: list[SelectionItem]
+    metadata: dict[str, object]
+    warnings: list[str]
+
+
+PROFILES: dict[str, ContextProfile] = {
+    "minimal": ContextProfile("minimal", 3, 200),
+    "standard": ContextProfile("standard", 8, 500),
+    "premium": ContextProfile("premium", 15, 1000),
+}
+
+
+def load_archi_ops_context(
+    repository_root: Path,
+    project_id: str,
+    task_type: str,
+    context_profile: str,
+) -> LoaderResult:
+    index_path = repository_root / "archi_ops" / "index.yaml"
+    warnings: list[str] = []
+    if not index_path.exists():
+        warnings.append(f"ARCHI OPS index missing: {index_path}")
+        return LoaderResult(files=[], maps=[], metadata=_empty_metadata(), warnings=warnings)
+
+    index_data = json.loads(index_path.read_text(encoding="utf-8"))
+    profile = PROFILES.get(context_profile, PROFILES["standard"])
+    project_data = index_data.get("projects", {}).get(project_id, {})
+
+    matching_files = _matching_items(project_data.get("files", []), task_type)
+    matching_maps = _matching_items(project_data.get("maps", []), task_type)
+    files = _select_items(matching_files, profile.max_files, profile.max_lines)
+    maps = _select_items(matching_maps, profile.max_files, profile.max_lines)
+
+    selected_lines = sum(item.lines for item in files)
+    total_tokens_estimated = _estimate_tokens_for_items(files, maps)
+    raw_context_tokens_estimated = _estimate_raw_context_tokens(matching_files, matching_maps)
+
+    metadata = {
+        "total_tokens_estimated": total_tokens_estimated,
+        "estimated_raw_context_tokens": raw_context_tokens_estimated,
+        "files_selected": len(files),
+        "files_excluded": max(0, len(matching_files) - len(files)),
+        "selected_files_count": len(files),
+        "selected_lines_count": selected_lines,
+        "context_profile": profile.name,
+        "max_files": profile.max_files,
+        "max_lines": profile.max_lines,
+    }
+
+    return LoaderResult(files=files, maps=maps, metadata=metadata, warnings=warnings)
+
+
+def _matching_items(items: list[dict[str, object]], task_type: str) -> list[dict[str, object]]:
+    matching = [item for item in items if task_type in item.get("task_types", [])]
+    matching.sort(key=lambda item: (-int(item.get("weight", 0)), str(item.get("path", ""))))
+    return matching
+
+
+def _select_items(
+    items: list[dict[str, object]],
+    max_files: int,
+    max_lines: int,
+) -> list[SelectionItem]:
+
+    selected: list[SelectionItem] = []
+    used_lines = 0
+    for item in items:
+        if len(selected) >= max_files:
+            break
+        lines = int(item.get("lines", 0))
+        if used_lines + lines > max_lines:
+            continue
+        path = str(item["path"])
+        reason = str(item.get("reason", "task_relevance=selected"))
+        content = f"path: {path}\nreason: {reason}\nweight: {item.get('weight', 0)}"
+        selected.append(SelectionItem(path=path, reason=reason, content=content, lines=lines))
+        used_lines += lines
+    return selected
+
+
+def _estimate_raw_context_tokens(
+    matching_files: list[dict[str, object]],
+    matching_maps: list[dict[str, object]],
+) -> int:
+    total_lines = sum(int(item.get("lines", 0)) for item in [*matching_files, *matching_maps])
+    return max(1, total_lines * 20)
+
+
+def _estimate_tokens_for_items(files: list[SelectionItem], maps: list[SelectionItem]) -> int:
+    total_chars = sum(len(item.content) for item in [*files, *maps])
+    return max(1, total_chars // 4)
+
+
+def _empty_metadata() -> dict[str, object]:
+    return {
+        "total_tokens_estimated": 0,
+        "files_selected": 0,
+        "files_excluded": 0,
+        "selected_files_count": 0,
+        "selected_lines_count": 0,
+        "context_profile": None,
+        "max_files": 0,
+        "max_lines": 0,
+    }

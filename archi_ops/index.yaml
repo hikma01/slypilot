@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "projects": {
+    "slypilot": {
+      "files": [
+        {"path": "docs/01_ARCHITECTURE.md", "task_types": ["architecture"], "weight": 90, "lines": 120, "reason": "task_relevance=critical"},
+        {"path": "docs/02_TASK_PACKET_STANDARD.md", "task_types": ["debug", "patch", "review", "docs"], "weight": 80, "lines": 140, "reason": "task_relevance=high"},
+        {"path": "docs/03_ARCHI_OPS_INDEX.md", "task_types": ["architecture", "debug", "patch", "review", "docs"], "weight": 70, "lines": 80, "reason": "task_relevance=structural"},
+        {"path": "docs/00_PROJECT_OVERVIEW.md", "task_types": ["explain", "docs"], "weight": 60, "lines": 60, "reason": "task_relevance=overview"},
+        {"path": "README.md", "task_types": ["architecture", "docs"], "weight": 50, "lines": 80, "reason": "task_relevance=entrypoint"}
+      ],
+      "maps": [
+        {"path": "archi_ops/index.md", "task_types": ["architecture", "debug", "patch", "review", "docs"], "weight": 100, "reason": "entrypoint"},
+        {"path": "docs/11_CONTEXT_SELECTION_CONTRACT.md", "task_types": ["architecture", "debug", "patch", "review", "docs"], "weight": 85, "reason": "contract"},
+        {"path": "docs/10_ARCHIOPS_INTEGRATION_AUDIT.md", "task_types": ["architecture", "debug", "patch", "review", "docs"], "weight": 75, "reason": "audit"}
+      ]
+    },
+    "slyscan": {
+      "files": [
+        {"path": "docs/03_ARCHI_OPS_INDEX.md", "task_types": ["architecture", "debug", "patch", "review", "docs"], "weight": 85, "lines": 100, "reason": "task_relevance=structural"},
+        {"path": "docs/01_ARCHITECTURE.md", "task_types": ["architecture"], "weight": 70, "lines": 100, "reason": "task_relevance=critical"}
+      ],
+      "maps": [
+        {"path": "Documents/ARCHIOPS/runtime-map.md", "task_types": ["debug", "patch"], "weight": 100, "reason": "runtime_reset"},
+        {"path": "Documents/ARCHIOPS/dependency-map.md", "task_types": ["debug", "patch", "architecture"], "weight": 90, "reason": "dependency_chain"},
+        {"path": "Documents/ARCHIOPS/db-map.md", "task_types": ["debug", "patch"], "weight": 80, "reason": "data_truth"},
+        {"path": "Documents/ARCHIOPS/semantic-index.md", "task_types": ["debug", "patch", "architecture"], "weight": 70, "reason": "repeat_incident_surface"}
+      ]
+    }
+  }
+}

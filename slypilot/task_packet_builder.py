@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 
+from slypilot.archi_ops_loader import load_archi_ops_context
 from slypilot.classifier import Classification
 from slypilot.intake import Intake
 from slypilot.project_resolver import ResolvedProject
@@ -32,16 +33,26 @@ def build_task_packet(
     warnings: list[str] = []
     task_id = _task_id()
     packet_id = task_id
+
     generated_dir = repository_root / "slypilot" / "packets" / "generated"
     generated_dir.mkdir(parents=True, exist_ok=True)
     packet_path = generated_dir / f"{task_id}.md"
 
     archi_ops_path = repository_root / "archi_ops" / "index.md"
     archi_ops_summary, negative_context = _load_archi_ops(archi_ops_path, warnings)
+    loader_result = load_archi_ops_context(
+        repository_root=repository_root,
+        project_id=project.name,
+        task_type=classification.task_type,
+        context_profile=_context_profile_for_project(project.name),
+    )
+    warnings.extend(loader_result.warnings)
 
-    selected_files = _selected_files(classification.task_type, project.name)
-    selected_lines_count = _selected_lines_count(selected_files)
-    raw_context = _build_raw_context(intake.raw_request, archi_ops_summary, selected_files)
+    selected_files = [item.path for item in loader_result.files]
+    selected_maps = [item.path for item in loader_result.maps]
+    selection_reasons = [f"{item.path}: {item.reason}" for item in [*loader_result.files, *loader_result.maps]]
+    selected_lines_count = int(loader_result.metadata["selected_lines_count"])
+    raw_context = _build_raw_context(intake.raw_request, archi_ops_summary, selected_files, selected_maps)
 
     content = _render_packet(
         project=project,
@@ -52,14 +63,17 @@ def build_task_packet(
         archi_ops_summary=archi_ops_summary,
         negative_context=negative_context,
         selected_files=selected_files,
+        selected_maps=selected_maps,
+        selection_reasons=selection_reasons,
         raw_context=raw_context,
         selected_lines_count=selected_lines_count,
+        loader_metadata=loader_result.metadata,
     )
 
     packet_path.write_text(content, encoding="utf-8")
 
     estimated_packet_tokens = estimate_tokens(content)
-    estimated_raw_context_tokens = estimate_tokens(raw_context)
+    estimated_raw_context_tokens = int(loader_result.metadata["estimated_raw_context_tokens"])
     context_reduction_ratio = (
         None
         if estimated_raw_context_tokens == 0
@@ -77,8 +91,11 @@ def build_task_packet(
         "context_reduction_ratio": context_reduction_ratio,
         "selected_files_count": len(selected_files),
         "selected_lines_count": selected_lines_count,
+        "files_excluded_count": int(loader_result.metadata["files_excluded"]),
         "round_trips": 0,
         "negative_context": negative_context,
+        "selected_maps": selected_maps,
+        "selection_reasons": selection_reasons,
     }
 
     return BuiltPacket(
@@ -117,36 +134,26 @@ def _load_archi_ops(path: Path, warnings: list[str]) -> tuple[str, list[str]]:
     return summary, negative_context
 
 
-def _selected_files(task_type: str, project: str) -> list[str]:
-    files = ["archi_ops/index.md"]
-    if project == "slypilot":
-        files.append("docs/01_ARCHITECTURE.md")
-    elif project == "hermes":
-        files.append("docs/04_SECURITY.md")
-    else:
-        files.append("docs/03_ARCHI_OPS_INDEX.md")
-
-    if task_type == "architecture":
-        files.append("docs/01_ARCHITECTURE.md")
-    elif task_type == "debug":
-        files.append("docs/02_TASK_PACKET_STANDARD.md")
-    elif task_type == "explain":
-        files.append("docs/00_PROJECT_OVERVIEW.md")
-
-    return list(dict.fromkeys(files))
+def _context_profile_for_project(project_name: str) -> str:
+    if project_name == "slypilot":
+        return "standard"
+    if project_name == "slyscan":
+        return "premium"
+    return "minimal"
 
 
-def _selected_lines_count(files: list[str]) -> int:
-    # V1 intentionally uses a simple, bounded proxy.
-    return sum(25 if path.endswith(".md") else 10 for path in files)
-
-
-def _build_raw_context(raw_request: str, archi_ops_summary: str, selected_files: list[str]) -> str:
+def _build_raw_context(
+    raw_request: str,
+    archi_ops_summary: str,
+    selected_files: list[str],
+    selected_maps: list[str],
+) -> str:
     return "\n".join(
         [
             raw_request,
             archi_ops_summary,
             "\n".join(selected_files),
+            "\n".join(selected_maps),
         ]
     )
 
@@ -160,10 +167,13 @@ def _render_packet(
     archi_ops_summary: str,
     negative_context: list[str],
     selected_files: list[str],
+    selected_maps: list[str],
+    selection_reasons: list[str],
     raw_context: str,
     selected_lines_count: int,
+    loader_metadata: dict[str, object],
 ) -> str:
-    estimated_raw_context_tokens = estimate_tokens(raw_context)
+    estimated_raw_context_tokens = int(loader_metadata["estimated_raw_context_tokens"])
     estimated_packet_tokens = estimate_tokens(
         "\n".join(
             [
@@ -177,85 +187,89 @@ def _render_packet(
                 archi_ops_summary,
                 "\n".join(negative_context),
                 "\n".join(selected_files),
+                "\n".join(selected_maps),
+                "\n".join(selection_reasons),
             ]
         )
     )
     negative_context_lines = [f"- {item}" for item in negative_context] or ["- none"]
     body_lines = [
-            "# TASK PACKET",
-            "",
-            "## METADATA",
-            "",
-            f"packet_id: {packet_id}",
-            f"task_id: {task_id}",
-            f"project: {project.name}",
-            f"environment: {project.environment}",
-            f"provider: {project.provider}",
-            f"task_type: {classification.task_type}",
-            "dry_run: true",
-            "",
-            "---",
-            "",
-            "## CONSTRAINTS",
-            "",
-            "max_files: 5",
-            "max_lines_per_file: 300",
-            "no_global_scan: true",
-            "no_secret: true",
-            "no_system_access: true",
-            "",
-            "---",
-            "",
-            "## METRICS",
-            "",
-            f"estimated_raw_context_tokens: {estimated_raw_context_tokens}",
-            f"estimated_packet_tokens: {estimated_packet_tokens}",
-            f"context_reduction_ratio: {round(estimated_raw_context_tokens / max(1, estimated_packet_tokens), 4) if estimated_raw_context_tokens else 'null'}",
-            f"selected_files_count: {len(selected_files)}",
-            f"selected_lines_count: {selected_lines_count}",
-            "round_trips: 0",
-            "",
-            "---",
-            "",
-            "## NEGATIVE CONTEXT",
-            "",
-            *negative_context_lines,
-            "",
-            "---",
-            "",
-            "## INPUTS",
-            "",
-            f"user_request: {intake.raw_request}",
-            f"detected_keywords: {classification.task_type}",
-            f"selected_files: {', '.join(selected_files)}",
-            "loaded_maps: archi_ops/index.md",
-            "logs: none",
-            "",
-            "---",
-            "",
-            "## ARCHI OPS CONTEXT",
-            "",
-            f"summary: {archi_ops_summary}",
-            f"known_issues: {', '.join(item for item in negative_context[:2]) if negative_context else 'none'}",
-            "",
-            "---",
-            "",
-            "## USER REQUEST",
-            "",
-            intake.raw_request,
-            "",
-            "---",
-            "",
-            "## EXPECTED OUTPUT",
-            "",
-            "1. Diagnostic",
-            "2. Cause probable",
-            "3. Correctif minimal",
-            "4. Tests à exécuter",
-            "5. Risques",
-        ]
-    body = "\n".join(body_lines)
-    return body
+        "# TASK PACKET",
+        "",
+        "## METADATA",
+        "",
+        f"packet_id: {packet_id}",
+        f"task_id: {task_id}",
+        f"project: {project.name}",
+        f"environment: {project.environment}",
+        f"provider: {project.provider}",
+        f"task_type: {classification.task_type}",
+        "dry_run: true",
+        "",
+        "---",
+        "",
+        "## CONSTRAINTS",
+        "",
+        "max_files: 5",
+        "max_lines_per_file: 300",
+        "no_global_scan: true",
+        "no_secret: true",
+        "no_system_access: true",
+        "",
+        "---",
+        "",
+        "## METRICS",
+        "",
+        f"estimated_raw_context_tokens: {estimated_raw_context_tokens}",
+        f"estimated_packet_tokens: {estimated_packet_tokens}",
+        f"context_reduction_ratio: {round(estimated_raw_context_tokens / max(1, estimated_packet_tokens), 4) if estimated_raw_context_tokens else 'null'}",
+        f"selected_files_count: {len(selected_files)}",
+        f"selected_lines_count: {selected_lines_count}",
+        f"files_excluded_count: {loader_metadata['files_excluded']}",
+        "round_trips: 0",
+        "",
+        "---",
+        "",
+        "## NEGATIVE CONTEXT",
+        "",
+        *negative_context_lines,
+        "",
+        "---",
+        "",
+        "## INPUTS",
+        "",
+        f"user_request: {intake.raw_request}",
+        f"detected_keywords: {classification.task_type}",
+        f"selected_files: {', '.join(selected_files)}",
+        f"selected_maps: {', '.join(selected_maps)}",
+        f"selection_reasons: {', '.join(selection_reasons) if selection_reasons else 'none'}",
+        "loaded_maps: archi_ops/index.yaml",
+        "logs: none",
+        "",
+        "---",
+        "",
+        "## ARCHI OPS CONTEXT",
+        "",
+        f"summary: {archi_ops_summary}",
+        f"known_issues: {', '.join(item for item in negative_context[:2]) if negative_context else 'none'}",
+        "",
+        "---",
+        "",
+        "## USER REQUEST",
+        "",
+        intake.raw_request,
+        "",
+        "---",
+        "",
+        "## EXPECTED OUTPUT",
+        "",
+        "1. Diagnostic",
+        "2. Cause probable",
+        "3. Correctif minimal",
+        "4. Tests à exécuter",
+        "5. Risques",
+    ]
+    return "\n".join(body_lines)
 
 
 def append_history(history_path: Path, packet: BuiltPacket) -> None:
