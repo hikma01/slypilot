@@ -193,6 +193,28 @@ def _render_packet(
         )
     )
     negative_context_lines = [f"- {item}" for item in negative_context] or ["- none"]
+    system_facts_lines = [
+        "- Selection is deterministic",
+        "- No embeddings are used",
+        "- No vector database is used",
+        "- Context comes from structured-index",
+        "- Loader uses static selection rules",
+    ]
+    forbidden_assumptions_lines = [
+        "- Do not assume scoring exists",
+        "- Do not assume vector search exists",
+        "- Do not assume embeddings exist",
+        "- Do not assume hidden modules exist",
+        "- Do not assume automatic orchestration exists",
+        "- Do not invent configuration files",
+        "- Do not invent architecture components",
+    ]
+    out_of_scope_lines = [
+        "- Do not redesign the architecture",
+        "- Do not propose new services",
+        "- Do not propose new frameworks",
+        "- Do not propose infrastructure changes unless explicitly requested",
+    ]
     body_lines = [
         "# TASK PACKET",
         "",
@@ -215,6 +237,24 @@ def _render_packet(
         "no_global_scan: true",
         "no_secret: true",
         "no_system_access: true",
+        "",
+        "---",
+        "",
+        "## SYSTEM_FACTS",
+        "",
+        *system_facts_lines,
+        "",
+        "---",
+        "",
+        "## FORBIDDEN_ASSUMPTIONS",
+        "",
+        *forbidden_assumptions_lines,
+        "",
+        "---",
+        "",
+        "## OUT_OF_SCOPE",
+        "",
+        *out_of_scope_lines,
         "",
         "---",
         "",

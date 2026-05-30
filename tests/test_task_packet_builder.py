@@ -32,6 +32,9 @@ def test_structured_dry_run_generates_packet():
     content = packet_path.read_text(encoding="utf-8")
     assert "# TASK PACKET" in content
     assert "## METADATA" in content
+    assert "## SYSTEM_FACTS" in content
+    assert "## FORBIDDEN_ASSUMPTIONS" in content
+    assert "## OUT_OF_SCOPE" in content
     assert "project: slyscan" in content
     assert "task_type: debug" in content
     assert "## NEGATIVE CONTEXT" in content
