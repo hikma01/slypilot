@@ -21,6 +21,18 @@ def test_repository_structure():
         root / "archi_ops",
         root / "archi_ops" / "index.md",
         root / "docs",
+        root / "docs" / "02A_TASK_PACKET_RULES.md",
+        root / "examples",
+        root / "examples" / "task_packet_debug.md",
+        root / "examples" / "task_packet_patch.md",
+        root / "examples" / "task_packet_architecture.md",
+        root / "examples" / "invalid",
+        root / "examples" / "invalid" / "invalid_missing_metadata.md",
+        root / "examples" / "invalid" / "invalid_no_negative_context.md",
+        root / "examples" / "invalid" / "invalid_secret_exposed.md",
+        root / "examples" / "invalid" / "invalid_token_budget.md",
+        root / "schemas",
+        root / "schemas" / "task_packet.schema.yaml",
         root / "tests",
     ]
 
@@ -36,6 +48,7 @@ def test_documentation_inventory():
         "00_PROJECT_OVERVIEW.md",
         "01_ARCHITECTURE.md",
         "02_TASK_PACKET_STANDARD.md",
+        "02A_TASK_PACKET_RULES.md",
         "03_ARCHI_OPS_INDEX.md",
         "04_SECURITY.md",
         "05_PROVIDER_ADAPTERS.md",
@@ -46,4 +59,3 @@ def test_documentation_inventory():
 
     for name in expected_docs:
         assert (docs / name).exists(), f"Missing documentation file: {name}"
-
