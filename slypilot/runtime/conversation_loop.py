@@ -231,6 +231,18 @@ class ConversationLoop:
             self.output("")
             self.output(render_packet_summary(packet_metadata))
 
+    def _should_run_expert_flow(self, coordinated: object) -> bool:
+        trace_obj = getattr(coordinated, "trace", None)
+        if trace_obj is None:
+            return False
+        if hasattr(trace_obj, "to_dict"):
+            intent_trace = trace_obj.to_dict().get("intent_trace")
+        else:
+            intent_trace = getattr(trace_obj, "intent_trace", None)
+        if not isinstance(intent_trace, dict):
+            return False
+        return intent_trace.get("final_decision") == "auto_prepare_then_analyze"
+
     def _handle_pending_reply(self, raw: str) -> bool:
         execution = self.pending_executor.resolve(raw, self.pending_action)
         if not execution.handled:
@@ -376,48 +388,66 @@ class ConversationLoop:
             self._sync_registry(status="active")
             return
 
-        if resource.intake_status == "init_required" and project.name not in {"unknown", "none"}:
+        if self._should_run_expert_flow(coordinated) and project.name not in {"unknown", "none"}:
             project_label = selected_project_label(resource, project.name)
             selected_resource = resource.selected_resource or {}
             project_path = str(selected_resource.get("path", self.cwd)) if isinstance(selected_resource, dict) else self.cwd.as_posix()
             if self._is_analysis_request(raw):
-                self.output(
-                    render_slypilot_message(
-                        f"Projet détecté : {project_label}",
-                        [
-                            f"Chemin : {project_path}",
-                            "",
-                            "Je vais préparer le projet pour pouvoir l’analyser correctement.",
-                        ],
+                preparation = None
+                if resource.intake_status == "init_required":
+                    self.output(
+                        render_slypilot_message(
+                            f"Projet détecté : {project_label}",
+                            [
+                                f"Chemin : {project_path}",
+                                "",
+                                "Je vais préparer le projet pour pouvoir l’analyser correctement.",
+                            ],
+                        )
                     )
-                )
-                self.output(render_execution_stage("Préparation du projet", "en cours"))
-                self.output(render_execution_stage("Cartographie", "en cours"))
-                self.output(render_execution_stage("Construction du contexte", "en cours"))
-                self.output(render_execution_stage("Analyse", "en cours"))
-                self.output(render_execution_stage("Restitution", "en cours"))
-                preparation = prepare_project(project_path)
-                if preparation.preparation_status == "failed":
-                    reason = preparation.errors[0] if preparation.errors else "préparation impossible"
-                    self.output(render_execution_stage("Préparation du projet", "échec", reason))
-                    self.output(render_final_failure(project_label, reason, "Vérifie le chemin ou les droits d’accès."))
-                    self._append_assistant("préparation du projet impossible.")
-                    self._sync_registry(status="active")
-                    return
-                self.output(render_execution_stage("Préparation du projet", "terminé"))
-                self.output(render_execution_stage("Cartographie", "terminé"))
-                self.output(render_execution_stage("Construction du contexte", "terminé"))
-                self.output(render_execution_stage("Analyse", "terminé"))
-                self.output(render_execution_stage("Restitution", "terminé"))
-                self.output(
-                    render_slypilot_message(
-                        "Préparation du diagnostic initial...",
-                        [
-                            "Diagnostic initial basé sur la cartographie locale et le contexte borné.",
-                        ],
+                    self.output(render_execution_stage("Préparation du projet", "en cours"))
+                    self.output(render_execution_stage("Cartographie", "en cours"))
+                    self.output(render_execution_stage("Construction du contexte", "en cours"))
+                    self.output(render_execution_stage("Analyse", "en cours"))
+                    self.output(render_execution_stage("Restitution", "en cours"))
+                    preparation = prepare_project(project_path)
+                    if preparation.preparation_status == "failed":
+                        reason = preparation.errors[0] if preparation.errors else "préparation impossible"
+                        self.output(render_execution_stage("Préparation du projet", "échec", reason))
+                        self.output(render_final_failure(project_label, reason, "Vérifie le chemin ou les droits d’accès."))
+                        self._append_assistant("préparation du projet impossible.")
+                        self._sync_registry(status="active")
+                        return
+                    self.output(render_execution_stage("Préparation du projet", "terminé"))
+                    self.output(render_execution_stage("Cartographie", "terminé"))
+                    self.output(render_execution_stage("Construction du contexte", "terminé"))
+                    self.output(render_execution_stage("Analyse", "terminé"))
+                    self.output(render_execution_stage("Restitution", "terminé"))
+                    self.output(
+                        render_slypilot_message(
+                            "Préparation du diagnostic initial...",
+                            [
+                                "Diagnostic initial basé sur la cartographie locale et le contexte borné.",
+                            ],
+                        )
                     )
-                )
-                if preparation.preparation_status == "success":
+                    self._append_assistant(f"préparation du projet terminée pour {project_label}.")
+                else:
+                    self.output(
+                        render_slypilot_message(
+                            f"Projet détecté : {project_label}",
+                            [
+                                f"Chemin : {project_path}",
+                                "",
+                                "Préparation déjà disponible.",
+                                "",
+                                "Préparation du diagnostic initial...",
+                                "Diagnostic initial basé sur la cartographie locale et le contexte borné.",
+                            ],
+                        )
+                    )
+                    self._append_assistant(f"préparation déjà disponible pour {project_label}.")
+                if preparation is not None and preparation.preparation_status == "success":
                     self.session = self.session_manager.update(
                         last_project={
                             "requested_project": project_label,
@@ -427,7 +457,6 @@ class ConversationLoop:
                             "archiops_status": "present",
                         },
                     )
-                self._append_assistant(f"préparation du projet terminée pour {project_label}.")
                 followup = coordinate_request(
                     build_intake(raw, self.repository_root),
                     self.repository_root,
