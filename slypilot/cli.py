@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -11,6 +10,26 @@ from slypilot.adapters.deepseek_adapter import DeepSeekAdapterError, run_deepsee
 from slypilot.coordinator import coordinate_request
 from slypilot.archiops_init import initialize_project
 from slypilot.intake import build_intake
+from slypilot.runtime import ConversationLoop
+from slypilot.runtime.session_registry import SessionRegistry
+from slypilot.runtime.session_resume import resume_last_session, resume_session
+from slypilot.runtime.session_retention import prune_sessions
+from slypilot.ui import (
+    render_ambiguous_clarification,
+    render_banner,
+    render_error_message,
+    render_init_message,
+    render_packet_summary,
+    render_slypilot_message,
+    render_coordinator_trace,
+    render_resource_trace,
+    render_greeting_prompt,
+    render_init_required_prompt,
+    render_archiops_explanation,
+    render_ambiguity_prompt,
+    render_path_missing,
+    render_sensitive_path,
+)
 from slypilot.task_packet_builder import append_history
 
 
@@ -18,22 +37,158 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _print_warnings(warnings: list[str]) -> None:
+    if not warnings:
+        return
+    print()
+    print("Avertissements :")
+    for warning in warnings:
+        print(f"- {warning}")
+
+
+def _render_sessions_list(repository_root: Path) -> str:
+    registry = SessionRegistry(repository_root)
+    sessions = registry.list_sessions()
+    lines = [
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "📚 Sessions",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "",
+    ]
+    if not sessions:
+        lines.append("Aucune session enregistrée.")
+        return "\n".join(lines)
+    for index, session in enumerate(sessions, start=1):
+        last_activity = str(session.get("last_activity", ""))[:16].replace("T", " ")
+        lines.extend(
+            [
+                f"{index}. {session.get('session_id', '')}",
+                f"   Projet : {session.get('project', 'unknown')}",
+                f"   Messages : {session.get('message_count', 0)}",
+                f"   Dernière activité : {last_activity[-5:] if last_activity else 'inconnue'}",
+                "",
+            ]
+        )
+    return "\n".join(lines).rstrip()
+
+
+def _render_session_state(repository_root: Path) -> str:
+    registry = SessionRegistry(repository_root)
+    session = registry.latest_session()
+    if session is None:
+        return "Aucune session disponible."
+    lines = [
+        "session_id:",
+        f"{session.get('session_id', '')}",
+        "created_at:",
+        f"{session.get('created_at', '')}",
+        "cwd:",
+        f"{session.get('cwd', '')}",
+        "project:",
+        f"{session.get('project', '')}",
+        "status:",
+        f"{session.get('status', '')}",
+        "message_count:",
+        f"{session.get('message_count', 0)}",
+        "last_activity:",
+        f"{session.get('last_activity', '')}",
+        "pending_action:",
+        f"{session.get('pending_action', None)}",
+    ]
+    return "\n".join(lines)
+
+
+def _render_history(repository_root: Path, project: str | None = None) -> str:
+    registry = SessionRegistry(repository_root)
+    sessions = registry.list_sessions()
+    if project:
+        sessions = [item for item in sessions if str(item.get("project", "")).lower() == project.lower()]
+        lines = [
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            f"📜 Historique projet : {project.capitalize()}",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            "",
+        ]
+    else:
+        lines = [
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            "📜 Historique récent",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            "",
+        ]
+    if not sessions:
+        lines.append("Aucune session disponible.")
+        return "\n".join(lines)
+    for session in sessions[:10]:
+        last_activity = str(session.get("last_activity", ""))[:10]
+        lines.append(f"{last_activity[8:10]}/{last_activity[5:7]} {last_activity[11:16] if len(last_activity) >= 16 else '??:??'} - {session.get('project', 'unknown').capitalize()}")
+    if project:
+        lines.append("")
+        lines.append(f"- Session {sessions[0].get('session_id', '')}")
+    return "\n".join(lines)
+
+
+def _handle_session_command(repository_root: Path, args: list[str]) -> int:
+    print(_render_session_state(repository_root))
+    return 0
+
+
+def _handle_sessions_command(repository_root: Path) -> int:
+    prune_sessions(repository_root)
+    print(_render_sessions_list(repository_root))
+    return 0
+
+
+def _handle_history_command(repository_root: Path, args: list[str]) -> int:
+    project = args[0] if args else None
+    print(_render_history(repository_root, project=project))
+    return 0
+
+
+def _handle_resume_command(repository_root: Path, args: list[str]) -> int:
+    if not args:
+        raise SystemExit("resume requires a session id or 'last'")
+    data = resume_last_session(repository_root) if args[0] == "last" else resume_session(repository_root, args[0])
+    session = data["session"]
+    print("Session restaurée.")
+    print()
+    print("Projet :")
+    print(f"{session.get('project', 'unknown').capitalize()}")
+    print()
+    print("Dernière action :")
+    events = data["events"]
+    assistant_events = [event for event in events if event.get("role") == "assistant"]
+    if assistant_events:
+        print(assistant_events[-1].get("content", "Aucune action"))
+    else:
+        print("Aucune action")
+    return ConversationLoop.from_session_data(repository_root, Path.cwd(), session, events).run()
+
+
 def main(argv: list[str] | None = None) -> int:
     raw_args = list(argv if argv is not None else sys.argv[1:])
+    root = _repo_root()
+    interactive_verbose = "--verbose" in raw_args or "--debug" in raw_args
+    if raw_args:
+        head = raw_args[0]
+        if head == "sessions":
+            return _handle_sessions_command(root)
+        if head == "session":
+            return _handle_session_command(root, raw_args[1:])
+        if head == "history":
+            return _handle_history_command(root, raw_args[1:])
+        if head == "resume":
+            return _handle_resume_command(root, raw_args[1:])
     if raw_args and raw_args[0] == "init":
         root = Path.cwd()
         result = initialize_project(root)
-        print(f"ARCHI OPS initialized for {result.project_name}.")
+        print(render_init_message(result.project_name, [str(path.relative_to(root)) for path in result.created_files]))
         print()
-        print("Created:")
-        for path in result.created_files:
-            print(f"- {path.relative_to(root)}")
-        print()
-        print("Updated:")
+        print("Mis à jour :")
         print(f"- {result.updated_index.relative_to(_repo_root())}")
         if result.warnings:
             print()
-            print("Warnings:")
+            print("Avertissements :")
             for warning in result.warnings:
                 print(f"- {warning}")
         return 0
@@ -42,26 +197,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("request", nargs="?", help="raw user request to classify")
     parser.add_argument("--dry-run", action="store_true", help="print the initial detection result")
     parser.add_argument("--live-run", action="store_true", help="send the generated packet to the provider")
+    parser.add_argument("--verbose", action="store_true", help="show technical traces")
+    parser.add_argument("--debug", action="store_true", help="show technical traces")
     args = parser.parse_args(raw_args)
 
     if not args.request:
         if sys.stdin.isatty():
-            print("SlyPilot ready.")
-            print("Type your request:")
-            try:
-                request = input("> ").strip()
-            except EOFError:
-                return 1
-            if not request:
-                return 1
-            args.request = request
+            return ConversationLoop.start(root, Path.cwd(), verbose=interactive_verbose)
         else:
             request = sys.stdin.read().strip()
             if not request:
                 parser.error("a request is required")
             args.request = request
 
-    root = _repo_root()
     intake = build_intake(args.request, root)
 
     coordinated = coordinate_request(
@@ -73,50 +221,29 @@ def main(argv: list[str] | None = None) -> int:
     )
     classification = coordinated.intent.classification
     project = coordinated.project
+    verbose_mode = getattr(args, "verbose", False) or getattr(args, "debug", False)
 
     if classification.task_type == "unknown":
-        print("SlyPilot attend une tâche technique.")
-        print()
-        print("Exemples :")
-        print("- analyse architecture SlyPilot")
-        print("- corrige bug upload SlyScan")
-        print("- explique problème login Hermes")
+        print(render_greeting_prompt())
         return 0
 
     if not coordinated.decision.allowed:
-        print("SlyPilot cannot resolve this request unambiguously.")
-        print()
-        print(f"requested_project: {project.requested_project}")
-        print(f"resolved_project: {project.name}")
-        print(f"resolution_source: {project.resolution_source}")
-        print(f"confidence: {project.confidence}")
-        print(f"fallback_used: {str(project.fallback_used).lower()}")
-        print(f"mismatch_detected: {str(project.mismatch_detected).lower()}")
-        print()
-        print("RESOURCE_TRACE:")
-        print(f"  raw_input: {coordinated.resource.raw_input}")
-        print(f"  detected_paths: {', '.join(coordinated.resource.detected_paths) if coordinated.resource.detected_paths else 'none'}")
-        print(f"  normalized_paths: {', '.join(coordinated.resource.normalized_paths) if coordinated.resource.normalized_paths else 'none'}")
-        print(f"  existing_paths: {', '.join(coordinated.resource.existing_paths) if coordinated.resource.existing_paths else 'none'}")
-        print(f"  missing_paths: {', '.join(coordinated.resource.missing_paths) if coordinated.resource.missing_paths else 'none'}")
-        print(f"  blocked_paths: {', '.join(coordinated.resource.blocked_paths) if coordinated.resource.blocked_paths else 'none'}")
-        print(f"  resource_types: {', '.join(coordinated.resource.resource_types) if coordinated.resource.resource_types else 'none'}")
-        print(f"  selected_resource: {coordinated.resource.selected_resource}")
-        print(f"  intake_status: {coordinated.resource.intake_status}")
-        print()
         selected_resource = coordinated.resource.selected_resource or {}
         selected_path = selected_resource.get("path", "") if isinstance(selected_resource, dict) else ""
         selected_type = selected_resource.get("type", "") if isinstance(selected_resource, dict) else ""
-        if selected_path and selected_type == "project_directory":
-            print("Commande comprise partiellement :")
-            print(f"- ressource détectée : {selected_path}")
-            print(f"- type : {selected_type}")
-            print(f"- statut : {coordinated.resource.intake_status}")
+        if coordinated.resource.intake_status == "blocked":
+            print(render_sensitive_path(selected_path or ""))
+        elif coordinated.resource.intake_status == "missing_path":
+            print(render_path_missing(coordinated.resource.detected_paths[0] if coordinated.resource.detected_paths else ""))
+        elif selected_path and selected_type == "project_directory":
+            print(render_ambiguity_prompt(selected_path.split("/")[-1], selected_path))
+        else:
+            print(render_ambiguity_prompt(project.name if project.name != "unknown" else "Projet", selected_path or project.name))
+        if verbose_mode:
             print()
-            print(f"Reformule par exemple :")
-            print(f"analyse le projet {selected_path}")
+            print(render_resource_trace(coordinated.resource))
             print()
-        print("Please confirm the target project explicitly.")
+            print(render_coordinator_trace(coordinated.trace))
         return 1
 
     if args.dry_run:
@@ -127,72 +254,36 @@ def main(argv: list[str] | None = None) -> int:
             packet,
             prompt=intake.raw_request,
         )
-        print("SLYPILOT DRY RUN")
-        print()
-        print("Detection:")
-        print(f"- task_type: {classification.task_type}")
-        print(f"- project: {project.name}")
-        print(f"- provider: {project.provider}")
-        print(f"- environment: {project.environment}")
-        print(f"- requested_project: {project.requested_project}")
-        print(f"- resolved_project: {project.name}")
-        print(f"- resolution_source: {project.resolution_source}")
-        print(f"- confidence: {project.confidence}")
-        print(f"- fallback_used: {str(project.fallback_used).lower()}")
-        print(f"- mismatch_detected: {str(project.mismatch_detected).lower()}")
-        print()
-        print("Generated Packet:")
-        print(f"- {packet.packet_path.relative_to(root)}")
-        print()
-        print("RESOURCE_TRACE:")
-        print(f"  raw_input: {coordinated.resource.raw_input}")
-        print(f"  detected_paths: {', '.join(coordinated.resource.detected_paths) if coordinated.resource.detected_paths else 'none'}")
-        print(f"  normalized_paths: {', '.join(coordinated.resource.normalized_paths) if coordinated.resource.normalized_paths else 'none'}")
-        print(f"  existing_paths: {', '.join(coordinated.resource.existing_paths) if coordinated.resource.existing_paths else 'none'}")
-        print(f"  missing_paths: {', '.join(coordinated.resource.missing_paths) if coordinated.resource.missing_paths else 'none'}")
-        print(f"  blocked_paths: {', '.join(coordinated.resource.blocked_paths) if coordinated.resource.blocked_paths else 'none'}")
-        print(f"  resource_types: {', '.join(coordinated.resource.resource_types) if coordinated.resource.resource_types else 'none'}")
-        print(f"  selected_resource: {coordinated.resource.selected_resource}")
-        print(f"  intake_status: {coordinated.resource.intake_status}")
-        print()
-        print("Warnings:")
-        if packet.warnings:
-            for warning in packet.warnings:
-                print(f"- {warning}")
+        print(render_slypilot_message("Mode brouillon", [f"Projet détecté : {project.name}", f"Statut : {coordinated.resource.intake_status}", f"Action recommandée :", f"- Packet généré : {packet.packet_path.relative_to(root)}"]))
+        _print_warnings(packet.warnings)
+        if verbose_mode:
+            print()
+            print(render_resource_trace(coordinated.resource))
+            print()
+            print(render_coordinator_trace(coordinated.trace))
+            print()
+            print(render_packet_summary(packet.metadata))
         else:
-            print("- none")
-        print()
-        print("--- TASK PACKET ---")
-        print(packet.content)
+            print()
+            print("Actions recommandées :")
+            print(f"- Packet généré : {packet.packet_path.relative_to(root)}")
     elif args.live_run:
         packet = coordinated.packet
         assert packet is not None
-        print("SLYPILOT LIVE RUN")
-        print()
-        print("Packet:")
-        print(f"- {packet.packet_path.relative_to(root)}")
-        print(f"- requested_project: {project.requested_project}")
-        print(f"- resolved_project: {project.name}")
-        print(f"- resolution_source: {project.resolution_source}")
-        print(f"- confidence: {project.confidence}")
-        print(f"- fallback_used: {str(project.fallback_used).lower()}")
-        print(f"- mismatch_detected: {str(project.mismatch_detected).lower()}")
-        print()
-        print("RESOURCE_TRACE:")
-        print(f"  raw_input: {coordinated.resource.raw_input}")
-        print(f"  detected_paths: {', '.join(coordinated.resource.detected_paths) if coordinated.resource.detected_paths else 'none'}")
-        print(f"  normalized_paths: {', '.join(coordinated.resource.normalized_paths) if coordinated.resource.normalized_paths else 'none'}")
-        print(f"  existing_paths: {', '.join(coordinated.resource.existing_paths) if coordinated.resource.existing_paths else 'none'}")
-        print(f"  missing_paths: {', '.join(coordinated.resource.missing_paths) if coordinated.resource.missing_paths else 'none'}")
-        print(f"  blocked_paths: {', '.join(coordinated.resource.blocked_paths) if coordinated.resource.blocked_paths else 'none'}")
-        print(f"  resource_types: {', '.join(coordinated.resource.resource_types) if coordinated.resource.resource_types else 'none'}")
-        print(f"  selected_resource: {coordinated.resource.selected_resource}")
-        print(f"  intake_status: {coordinated.resource.intake_status}")
-        print()
+        print(render_slypilot_message("Mode exécution", [f"Projet détecté : {project.name}", f"Statut : {coordinated.resource.intake_status}", f"Action recommandée :", f"- Packet prêt : {packet.packet_path.relative_to(root)}"]))
+        _print_warnings(packet.warnings)
+        if verbose_mode:
+            print()
+            print(render_resource_trace(coordinated.resource))
+            print()
+            print(render_coordinator_trace(coordinated.trace))
+            print()
+            print(render_packet_summary(packet.metadata))
         try:
             response = run_deepseek_live(packet)
         except DeepSeekAdapterError as exc:
-            print("Provider error:")
+            print()
+            print("Erreur fournisseur :")
             print(f"- {exc}")
             return 1
         append_history(
@@ -204,21 +295,16 @@ def main(argv: list[str] | None = None) -> int:
             response_tokens=response.response_tokens,
             response_text=response.response_text,
         )
-        print("Provider response:")
+        print()
+        print("Réponse fournisseur :")
         print(response.response_text)
         print()
-        print("Response metrics:")
+        print("Métriques :")
         print(f"- provider: {response.provider}")
         print(f"- model: {response.model}")
         print(f"- response_tokens: {response.response_tokens}")
     else:
-        result = {
-            "task_type": classification.task_type,
-            "project": project.name,
-            "provider": project.provider,
-            "environment": project.environment,
-        }
-        print(json.dumps(result, ensure_ascii=False))
+        print(render_slypilot_message("Résumé", [f"Projet détecté : {project.name}", f"Type de tâche : {classification.task_type}", "Mode : interactif"]))
     return 0
 
 
