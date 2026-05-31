@@ -2,89 +2,91 @@
 
 Date: 2026-05-31
 
-Purpose: capture comparable outputs for direct-provider runs versus SlyPilot-assisted runs on the same prompts.
+## Objective
+
+Compare direct-provider responses versus SlyPilot-assisted responses on the same prompts.
+
+The benchmark does not change production code.
 
 ## Scope
 
-This protocol defines only the capture format and execution rules for a reproducible benchmark.
+This protocol captures:
 
-It does not modify:
+- prompt
+- provider
+- model
+- timestamp
+- response_tokens
+- packet_path
+- response_text
 
-- loader
-- index
-- task packet
-- adapter
-- classifier
-- project resolver
+It does not:
 
-## Cases
-
-Run the following prompts exactly as written:
-
-1. `analyse architecture SlyPilot`
-2. `explique problème login Hermes`
-3. `corrige bug upload SlyScan`
-4. `audit sécurité Hermes`
+- score automatically
+- optimize prompts
+- add provider routing
+- alter loader, index, task packet, or adapter logic
 
 ## Modes
 
 ### Direct provider
 
-Run the prompt directly against the provider with no SlyPilot preprocessing.
+Send the raw user prompt directly to the provider.
 
-Capture the raw provider answer.
+Store results in `benchmarks/direct/`.
 
 ### SlyPilot
 
-Run the same prompt through the full SlyPilot flow.
+Send the same prompt through:
 
-Capture:
+- classifier
+- project resolver
+- ARCHI OPS loader
+- task packet builder
+- DeepSeek adapter
 
-- generated packet path
-- provider response
-- history entry
+Store results in `benchmarks/slypilot/`.
 
-## Required capture fields
+## Prompts
 
-For each run, persist:
+Use these exact prompts:
 
-- `prompt`
-- `mode` (`direct` or `slypilot`)
-- `provider`
-- `model`
-- `response_tokens`
-- `timestamp`
-- `response_text`
-- `packet_path` when `mode = slypilot`
-- `task_id` when available
+1. `Analyse l'architecture de SlyPilot. Explique son rôle, ses limites et les risques de dérive. Ne propose pas de nouvelle architecture.`
+2. `Explique le problème probable d'un bug login Hermes. Donne une stratégie de diagnostic minimale. Ne modifie pas le périmètre.`
+3. `Explique comment diagnostiquer un bug upload SlyScan. Liste les fichiers ou zones à vérifier en priorité. Ne propose pas de refonte.`
 
-## Result storage
+## Results directories
 
-Write one result file per execution under:
+- `benchmarks/direct/`
+- `benchmarks/slypilot/`
+- `benchmarks/evaluations/`
 
-- `benchmarks/results/`
+## Evaluation method
 
-Recommended filename:
+Use a manual grid with the following criteria:
 
-- `{timestamp}_{mode}_{case_slug}.json`
+- respect du périmètre
+- utilisation correcte du contexte
+- absence d'hallucination structurelle
+- précision technique
+- réponse actionnable
+- simplicité
+- réduction d'entropie
 
-## Reproducibility rules
+Each criterion is scored from `0` to `4`.
 
-- same prompt text
-- same provider
-- same model
-- same environment
-- no prompt optimization between direct and SlyPilot runs
-- no loader, index, or task packet changes during a benchmark batch
+Maximum score per response: `28`.
 
-## Suggested execution order
+## Limits
 
-1. direct provider case
-2. SlyPilot case
-3. compare the two stored outputs
-
-## Notes
-
-- If a run fails, store the failure payload instead of overwriting it.
-- Do not invent scores in the capture files.
+- A failed run must still be written to disk.
+- Do not invent missing responses.
 - Do not normalize away provider differences.
+- Do not modify benchmark prompts during a run.
+
+## Required outputs
+
+- direct captures for each prompt
+- SlyPilot captures for each prompt
+- evaluation files for each prompt
+- final benchmark summary
