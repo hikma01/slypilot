@@ -51,6 +51,7 @@ class TaskPacketBuilderTests(TestCase):
         self.assertEqual(payload["project"], "slyscan")
         self.assertEqual(payload["task_type"], "debug")
         self.assertEqual(payload["status"], "packet_generated")
+        self.assertEqual(payload["prompt"], "corrige bug upload SlyScan")
 
     def test_missing_archi_ops_index_warns_instead_of_crashing(self) -> None:
         archi_ops_index = self.root / "archi_ops" / "index.md"

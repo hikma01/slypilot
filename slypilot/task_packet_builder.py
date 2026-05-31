@@ -84,6 +84,7 @@ def build_task_packet(
         "project": project.name,
         "environment": project.environment,
         "provider": project.provider,
+        "prompt": intake.raw_request,
         "task_type": classification.task_type,
         "dry_run": True,
         "estimated_raw_context_tokens": estimated_raw_context_tokens,
@@ -315,13 +316,16 @@ def _render_packet(
 def append_history(
     history_path: Path,
     packet: BuiltPacket,
+    prompt: str | None = None,
     provider: str | None = None,
     status: str = "packet_generated",
     response_tokens: int | None = None,
+    response_text: str | None = None,
 ) -> None:
     history_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "task_id": packet.task_id,
+        "prompt": prompt or packet.metadata.get("prompt"),
         "project": packet.metadata["project"],
         "task_type": packet.metadata["task_type"],
         "provider": provider or packet.metadata["provider"],
@@ -332,5 +336,7 @@ def append_history(
     }
     if response_tokens is not None:
         payload["response_tokens"] = response_tokens
+    if response_text is not None:
+        payload["response_text"] = response_text
     with history_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")

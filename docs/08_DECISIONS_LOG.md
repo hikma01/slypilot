@@ -18,3 +18,4 @@
 - Relevance validation showed strong architecture results but weak SlyScan bug coverage.
 - Provider integration remains deferred until the index is strengthened.
 - Hermes security validation confirmed the issue was missing coverage plus budget representation.
+- Phase 9 keeps history minimal: append-only JSONL with prompt, packet reference, and optional response text.

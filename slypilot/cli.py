@@ -31,7 +31,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.dry_run:
         packet = build_task_packet(intake, classification, project, root)
-        append_history(root / "slypilot" / "storage" / "history.jsonl", packet)
+        append_history(
+            root / "slypilot" / "storage" / "history.jsonl",
+            packet,
+            prompt=intake.raw_request,
+        )
         print("SLYPILOT DRY RUN")
         print()
         print("Detection:")
@@ -68,9 +72,11 @@ def main(argv: list[str] | None = None) -> int:
         append_history(
             root / "slypilot" / "storage" / "history.jsonl",
             packet,
+            prompt=intake.raw_request,
             provider=response.provider,
             status=response.status,
             response_tokens=response.response_tokens,
+            response_text=response.response_text,
         )
         print("Provider response:")
         print(response.response_text)
