@@ -52,6 +52,9 @@ def load_archi_ops_context(
     index_data = json.loads(index_path.read_text(encoding="utf-8"))
     profile = PROFILES.get(context_profile, PROFILES["standard"])
     project_data = index_data.get("projects", {}).get(project_id, {})
+    if not project_data:
+        warnings.append(f"ARCHI OPS project not indexed: {project_id}")
+        return LoaderResult(files=[], maps=[], metadata=_empty_metadata(), warnings=warnings)
 
     matching_files = _matching_items(project_data.get("files", []), task_type)
     matching_maps = _matching_items(project_data.get("maps", []), task_type)

@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     root = _repo_root()
     intake = build_intake(args.request, root)
     classification = classify_intake(intake, root)
-    project = resolve_project(classification, root)
+    project = resolve_project(classification, root, raw_request=intake.raw_request, current_working_directory=Path.cwd())
 
     if classification.task_type == "unknown":
         print("SlyPilot attend une tâche technique.")

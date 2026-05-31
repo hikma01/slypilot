@@ -51,7 +51,8 @@ def build_task_packet(
     selected_files = [item.path for item in loader_result.files]
     selected_maps = [item.path for item in loader_result.maps]
     selection_reasons = [f"{item.path}: {item.reason}" for item in [*loader_result.files, *loader_result.maps]]
-    selected_lines_count = int(loader_result.metadata["selected_lines_count"])
+    loader_metadata = loader_result.metadata
+    selected_lines_count = int(loader_metadata.get("selected_lines_count", 0))
     raw_context = _build_raw_context(intake.raw_request, archi_ops_summary, selected_files, selected_maps)
 
     content = _render_packet(
@@ -67,13 +68,13 @@ def build_task_packet(
         selection_reasons=selection_reasons,
         raw_context=raw_context,
         selected_lines_count=selected_lines_count,
-        loader_metadata=loader_result.metadata,
+        loader_metadata=loader_metadata,
     )
 
     packet_path.write_text(content, encoding="utf-8")
 
     estimated_packet_tokens = estimate_tokens(content)
-    estimated_raw_context_tokens = int(loader_result.metadata["estimated_raw_context_tokens"])
+    estimated_raw_context_tokens = int(loader_metadata.get("estimated_raw_context_tokens", 0))
     context_reduction_ratio = (
         None
         if estimated_raw_context_tokens == 0
@@ -92,7 +93,7 @@ def build_task_packet(
         "context_reduction_ratio": context_reduction_ratio,
         "selected_files_count": len(selected_files),
         "selected_lines_count": selected_lines_count,
-        "files_excluded_count": int(loader_result.metadata["files_excluded"]),
+        "files_excluded_count": int(loader_metadata.get("files_excluded", 0)),
         "round_trips": 0,
         "negative_context": negative_context,
         "selected_maps": selected_maps,
@@ -174,7 +175,7 @@ def _render_packet(
     selected_lines_count: int,
     loader_metadata: dict[str, object],
 ) -> str:
-    estimated_raw_context_tokens = int(loader_metadata["estimated_raw_context_tokens"])
+    estimated_raw_context_tokens = int(loader_metadata.get("estimated_raw_context_tokens", 0))
     estimated_packet_tokens = estimate_tokens(
         "\n".join(
             [
