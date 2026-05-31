@@ -141,7 +141,9 @@ def _context_profile_for_project(project_name: str) -> str:
         return "standard"
     if project_name == "slyscan":
         return "premium"
-    return "minimal"
+    if project_name == "hermes":
+        return "minimal"
+    return "standard"
 
 
 def _build_raw_context(

@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from slypilot.adapters.deepseek_adapter import DeepSeekAdapterError, run_deepseek_live
+from slypilot.archiops_init import initialize_project
 from slypilot.intake import build_intake
 from slypilot.classifier import classify_intake
 from slypilot.project_resolver import resolve_project
@@ -19,11 +20,30 @@ def _repo_root() -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
+    raw_args = list(argv if argv is not None else sys.argv[1:])
+    if raw_args and raw_args[0] == "init":
+        root = Path.cwd()
+        result = initialize_project(root)
+        print(f"ARCHI OPS initialized for {result.project_name}.")
+        print()
+        print("Created:")
+        for path in result.created_files:
+            print(f"- {path.relative_to(root)}")
+        print()
+        print("Updated:")
+        print(f"- {result.updated_index.relative_to(_repo_root())}")
+        if result.warnings:
+            print()
+            print("Warnings:")
+            for warning in result.warnings:
+                print(f"- {warning}")
+        return 0
+
     parser = argparse.ArgumentParser(prog="slypilot")
     parser.add_argument("request", nargs="?", help="raw user request to classify")
     parser.add_argument("--dry-run", action="store_true", help="print the initial detection result")
     parser.add_argument("--live-run", action="store_true", help="send the generated packet to the provider")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(raw_args)
 
     if not args.request:
         if sys.stdin.isatty():

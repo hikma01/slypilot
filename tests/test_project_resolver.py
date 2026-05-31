@@ -60,7 +60,10 @@ class ProjectResolverTests(TestCase):
         )
 
         self.assertIn("- project: barberexpert", result.stdout)
-        self.assertIn("ARCHI OPS project not indexed: barberexpert", result.stdout)
+        self.assertIn("selected_maps:", result.stdout)
+        self.assertIn("Documents/ARCHIOPS/runtime-map.md", result.stdout)
+        self.assertIn("Documents/ARCHIOPS/dependency-map.md", result.stdout)
+        self.assertIn("Documents/ARCHIOPS/semantic-index.md", result.stdout)
         self.assertNotIn("- project: slyscan", result.stdout)
 
 
