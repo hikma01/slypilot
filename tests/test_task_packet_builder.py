@@ -5,6 +5,12 @@ import subprocess
 import sys
 from pathlib import Path
 from unittest import TestCase
+from unittest.mock import patch
+
+from slypilot.classifier import Classification
+from slypilot.intake import Intake
+from slypilot.project_resolver import ResolvedProject
+from slypilot.task_packet_builder import build_task_packet
 
 
 class TaskPacketBuilderTests(TestCase):
@@ -71,6 +77,48 @@ class TaskPacketBuilderTests(TestCase):
         finally:
             archi_ops_index.write_text(backup.read_text(encoding="utf-8"), encoding="utf-8")
             backup.unlink(missing_ok=True)
+
+    def test_selected_foreign_project_paths_block_packet(self) -> None:
+        intake = Intake(
+            raw_request="analyse BarberExpert et identifie les bugs visibles",
+            normalized_request="analyse BarberExpert et identifie les bugs visibles",
+            repository_root=self.root,
+        )
+        classification = Classification(
+            task_type="debug",
+            project_hint="barberexpert",
+            provider_hint="deepseek",
+            environment_hint="local",
+        )
+        project = ResolvedProject(
+            requested_project="barberexpert",
+            name="barberexpert",
+            provider="deepseek",
+            environment="local",
+            resolution_source="explicit_request",
+            confidence="high",
+            fallback_used=False,
+            mismatch_detected=False,
+        )
+
+        foreign_result = type(
+            "ForeignLoaderResult",
+            (),
+            {
+                "files": [type("Item", (), {"path": "apps/api/src/routes/upload.mjs", "reason": "foreign", "content": "", "lines": 1})()],
+                "maps": [],
+                "metadata": {
+                    "selected_lines_count": 1,
+                    "estimated_raw_context_tokens": 20,
+                    "files_excluded": 0,
+                },
+                "warnings": [],
+            },
+        )()
+
+        with patch("slypilot.task_packet_builder.load_archi_ops_context", return_value=foreign_result):
+            with self.assertRaises(ValueError):
+                build_task_packet(intake, classification, project, self.root)
 
 
 if __name__ == "__main__":

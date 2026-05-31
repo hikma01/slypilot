@@ -34,8 +34,8 @@ class ClassifierTests(TestCase):
             ("analyse architecture SlyPilot", {"task_type": "architecture", "project": "slypilot"}),
             ("corrige bug upload SlyScan", {"task_type": "debug", "project": "slyscan"}),
             ("explique problème login Hermes", {"task_type": "explain", "project": "hermes"}),
-            ("ajoute test history", {"task_type": "patch", "project": "slyscan"}),
-            ("fix cli launcher", {"task_type": "patch", "project": "slyscan"}),
+            ("ajoute test history", {"task_type": "patch", "project": "slypilot"}),
+            ("fix cli launcher", {"task_type": "patch", "project": "slypilot"}),
         ]
 
         for request, expected in cases:

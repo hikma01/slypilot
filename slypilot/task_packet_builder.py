@@ -29,6 +29,7 @@ def build_task_packet(
     classification: Classification,
     project: ResolvedProject,
     repository_root: Path,
+    current_working_directory: Path | None = None,
 ) -> BuiltPacket:
     warnings: list[str] = []
     task_id = _task_id()
@@ -40,6 +41,11 @@ def build_task_packet(
 
     archi_ops_path = repository_root / "archi_ops" / "index.md"
     archi_ops_summary, negative_context = _load_archi_ops(archi_ops_path, warnings)
+    project_contract, project_contract_warning, project_yaml_loaded, project_yaml_path = _load_project_contract(
+        current_working_directory or Path.cwd()
+    )
+    if project_contract_warning:
+        warnings.append(project_contract_warning)
     loader_result = load_archi_ops_context(
         repository_root=repository_root,
         project_id=project.name,
@@ -53,6 +59,11 @@ def build_task_packet(
     selection_reasons = [f"{item.path}: {item.reason}" for item in [*loader_result.files, *loader_result.maps]]
     loader_metadata = loader_result.metadata
     selected_lines_count = int(loader_metadata.get("selected_lines_count", 0))
+    _validate_selected_context_alignment(
+        repository_root=repository_root,
+        resolved_project=project.name,
+        selected_paths=[*selected_files, *selected_maps],
+    )
     raw_context = _build_raw_context(intake.raw_request, archi_ops_summary, selected_files, selected_maps)
 
     content = _render_packet(
@@ -69,6 +80,9 @@ def build_task_packet(
         raw_context=raw_context,
         selected_lines_count=selected_lines_count,
         loader_metadata=loader_metadata,
+        project_contract=project_contract,
+        project_yaml_loaded=project_yaml_loaded,
+        project_yaml_path=project_yaml_path,
     )
 
     packet_path.write_text(content, encoding="utf-8")
@@ -98,6 +112,9 @@ def build_task_packet(
         "negative_context": negative_context,
         "selected_maps": selected_maps,
         "selection_reasons": selection_reasons,
+        "project_yaml_loaded": project_yaml_loaded,
+        "project_yaml_path": str(project_yaml_path),
+        "project_contract_injected": bool(project_contract),
     }
 
     return BuiltPacket(
@@ -134,6 +151,59 @@ def _load_archi_ops(path: Path, warnings: list[str]) -> tuple[str, list[str]]:
 
     summary = "ARCHI OPS minimal index loaded."
     return summary, negative_context
+
+
+def _load_project_contract(project_root: Path) -> tuple[dict[str, str], str | None, bool, Path]:
+    project_yaml_path = project_root / "Documents" / "ARCHIOPS" / "project.yaml"
+    if not project_yaml_path.exists():
+        return {}, f"ARCHI OPS project contract missing: {project_yaml_path}", False, project_yaml_path
+
+    data: dict[str, str] = {}
+    current_section: str | None = None
+    for raw_line in project_yaml_path.read_text(encoding="utf-8").splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.endswith(":") and not raw_line.startswith(" "):
+            current_section = stripped[:-1]
+            continue
+        if ":" in stripped and current_section == "project":
+            key, value = [part.strip() for part in stripped.split(":", 1)]
+            data[key] = value
+    return data, None, True, project_yaml_path
+
+
+def _validate_selected_context_alignment(
+    repository_root: Path,
+    resolved_project: str,
+    selected_paths: list[str],
+) -> None:
+    index_path = repository_root / "archi_ops" / "index.yaml"
+    if not index_path.exists() or not selected_paths:
+        return
+
+    index_data = json.loads(index_path.read_text(encoding="utf-8"))
+    resolved_project_data = index_data.get("projects", {}).get(resolved_project, {})
+    resolved_paths = {
+        *(item.get("path", "") for item in resolved_project_data.get("files", [])),
+        *(item.get("path", "") for item in resolved_project_data.get("maps", [])),
+    }
+    foreign_paths: list[str] = []
+    for project_name, project_data in index_data.get("projects", {}).items():
+        if project_name == resolved_project:
+            continue
+        known_paths = {
+            *(item.get("path", "") for item in project_data.get("files", [])),
+            *(item.get("path", "") for item in project_data.get("maps", [])),
+        }
+        for path in selected_paths:
+            if path not in resolved_paths and path in known_paths:
+                foreign_paths.append(path)
+
+    if foreign_paths:
+        raise ValueError(
+            f"Selected context contains paths from another project than {resolved_project}: {', '.join(sorted(set(foreign_paths)))}"
+        )
 
 
 def _context_profile_for_project(project_name: str) -> str:
@@ -176,6 +246,9 @@ def _render_packet(
     raw_context: str,
     selected_lines_count: int,
     loader_metadata: dict[str, object],
+    project_contract: dict[str, str],
+    project_yaml_loaded: bool,
+    project_yaml_path: Path,
 ) -> str:
     estimated_raw_context_tokens = int(loader_metadata.get("estimated_raw_context_tokens", 0))
     estimated_packet_tokens = estimate_tokens(
@@ -218,6 +291,18 @@ def _render_packet(
         "- Do not propose new services",
         "- Do not propose new frameworks",
         "- Do not propose infrastructure changes unless explicitly requested",
+    ]
+    project_contract_lines = [
+        f"project_id: {project_contract.get('name', 'unknown')}" if project_contract else "project_id: unknown",
+        f"project_name: {project_contract.get('name', 'unknown')}" if project_contract else "project_name: unknown",
+        "project_type: unknown",
+        f"root_path: {project_contract.get('root', 'unknown')}" if project_contract else "root_path: unknown",
+        f"archiops_path: {project_contract.get('archiops_path', 'unknown')}" if project_contract else "archiops_path: unknown",
+        "runtime_type: unknown",
+        "primary_stack: unknown",
+        "forbidden_paths: .git, node_modules, .venv, dist, build, .cache, .env",
+        "allowed_scan_policy: bounded_top_level_only",
+        f"activation_status: {project_contract.get('status', 'missing')}" if project_contract else "activation_status: missing",
     ]
     body_lines = [
         "# TASK PACKET",
@@ -271,6 +356,9 @@ def _render_packet(
         f"selected_lines_count: {selected_lines_count}",
         f"files_excluded_count: {loader_metadata['files_excluded']}",
         "round_trips: 0",
+        f"project_yaml_loaded: {str(project_yaml_loaded).lower()}",
+        f"project_yaml_path: {project_yaml_path}",
+        f"project_contract_injected: {str(bool(project_contract)).lower()}",
         "",
         "---",
         "",
@@ -296,6 +384,12 @@ def _render_packet(
         "",
         f"summary: {archi_ops_summary}",
         f"known_issues: {', '.join(item for item in negative_context[:2]) if negative_context else 'none'}",
+        "",
+        "---",
+        "",
+        "## PROJECT CONTRACT",
+        "",
+        *project_contract_lines,
         "",
         "---",
         "",

@@ -8,11 +8,10 @@ import sys
 from pathlib import Path
 
 from slypilot.adapters.deepseek_adapter import DeepSeekAdapterError, run_deepseek_live
+from slypilot.coordinator import coordinate_request
 from slypilot.archiops_init import initialize_project
 from slypilot.intake import build_intake
-from slypilot.classifier import classify_intake
-from slypilot.project_resolver import resolve_project
-from slypilot.task_packet_builder import append_history, build_task_packet
+from slypilot.task_packet_builder import append_history
 
 
 def _repo_root() -> Path:
@@ -64,8 +63,16 @@ def main(argv: list[str] | None = None) -> int:
 
     root = _repo_root()
     intake = build_intake(args.request, root)
-    classification = classify_intake(intake, root)
-    project = resolve_project(classification, root, raw_request=intake.raw_request, current_working_directory=Path.cwd())
+
+    coordinated = coordinate_request(
+        intake,
+        root,
+        current_working_directory=Path.cwd(),
+        dry_run=args.dry_run,
+        live_run=args.live_run,
+    )
+    classification = coordinated.intent.classification
+    project = coordinated.project
 
     if classification.task_type == "unknown":
         print("SlyPilot attend une tâche technique.")
@@ -76,8 +83,22 @@ def main(argv: list[str] | None = None) -> int:
         print("- explique problème login Hermes")
         return 0
 
+    if not coordinated.decision.allowed:
+        print("SlyPilot cannot resolve this request unambiguously.")
+        print()
+        print(f"requested_project: {project.requested_project}")
+        print(f"resolved_project: {project.name}")
+        print(f"resolution_source: {project.resolution_source}")
+        print(f"confidence: {project.confidence}")
+        print(f"fallback_used: {str(project.fallback_used).lower()}")
+        print(f"mismatch_detected: {str(project.mismatch_detected).lower()}")
+        print()
+        print("Please confirm the target project explicitly.")
+        return 1
+
     if args.dry_run:
-        packet = build_task_packet(intake, classification, project, root)
+        packet = coordinated.packet
+        assert packet is not None
         append_history(
             root / "slypilot" / "storage" / "history.jsonl",
             packet,
@@ -90,6 +111,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- project: {project.name}")
         print(f"- provider: {project.provider}")
         print(f"- environment: {project.environment}")
+        print(f"- requested_project: {project.requested_project}")
+        print(f"- resolved_project: {project.name}")
+        print(f"- resolution_source: {project.resolution_source}")
+        print(f"- confidence: {project.confidence}")
+        print(f"- fallback_used: {str(project.fallback_used).lower()}")
+        print(f"- mismatch_detected: {str(project.mismatch_detected).lower()}")
         print()
         print("Generated Packet:")
         print(f"- {packet.packet_path.relative_to(root)}")
@@ -104,11 +131,18 @@ def main(argv: list[str] | None = None) -> int:
         print("--- TASK PACKET ---")
         print(packet.content)
     elif args.live_run:
-        packet = build_task_packet(intake, classification, project, root)
+        packet = coordinated.packet
+        assert packet is not None
         print("SLYPILOT LIVE RUN")
         print()
         print("Packet:")
         print(f"- {packet.packet_path.relative_to(root)}")
+        print(f"- requested_project: {project.requested_project}")
+        print(f"- resolved_project: {project.name}")
+        print(f"- resolution_source: {project.resolution_source}")
+        print(f"- confidence: {project.confidence}")
+        print(f"- fallback_used: {str(project.fallback_used).lower()}")
+        print(f"- mismatch_detected: {str(project.mismatch_detected).lower()}")
         print()
         try:
             response = run_deepseek_live(packet)
