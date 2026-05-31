@@ -58,6 +58,7 @@ class CoordinatorTests(TestCase):
         self.assertIn("archiops", trace)
         self.assertIn("decision", trace)
         self.assertIn("reason", trace)
+        self.assertTrue(result.resource.to_dict()["raw_input"])
 
     def test_provider_is_not_called_when_coherence_fails(self) -> None:
         intake = build_intake("analyse BarberExpert et identifie les bugs visibles", self.root)
@@ -90,6 +91,65 @@ class CoordinatorTests(TestCase):
         self.assertIsNone(result.packet)
         self.assertEqual(result.block_reason, "project_mismatch_detected")
         mocked_build_packet.assert_not_called()
+
+    def test_explicit_path_resolves_project_from_resource(self) -> None:
+        intake = build_intake(
+            "analyse mon projet /Users/hakimradi/Nextcloud/SlyProjet/SlyAudit",
+            self.root,
+        )
+        result = coordinate_request(
+            intake,
+            self.root,
+            current_working_directory=self.barberexpert_root,
+            dry_run=True,
+        )
+
+        self.assertEqual(result.project.name, "slyaudit")
+        self.assertEqual(result.project.resolution_source, "explicit_path")
+        self.assertIn("/Users/hakimradi/Nextcloud/SlyProjet/SlyAudit", result.resource.detected_paths)
+        self.assertEqual(result.resource.intake_status, "init_required")
+
+    def test_missing_path_blocks_execution(self) -> None:
+        intake = build_intake("analyse /Users/hakimradi/Nextcloud/SlyProjet/FakeProject", self.root)
+        result = coordinate_request(
+            intake,
+            self.root,
+            current_working_directory=self.barberexpert_root,
+            dry_run=True,
+        )
+
+        self.assertFalse(result.decision.allowed)
+        self.assertEqual(result.block_reason, "local path does not exist")
+        self.assertEqual(result.resource.intake_status, "missing_path")
+
+    def test_sensitive_path_blocks_execution(self) -> None:
+        intake = build_intake("analyse ~/.ssh", self.root)
+        result = coordinate_request(
+            intake,
+            self.root,
+            current_working_directory=self.barberexpert_root,
+            dry_run=True,
+        )
+
+        self.assertFalse(result.decision.allowed)
+        self.assertEqual(result.block_reason, "sensitive path blocked")
+        self.assertEqual(result.resource.intake_status, "blocked")
+
+    def test_multiple_paths_require_clarification(self) -> None:
+        intake = build_intake(
+            "analyse /Users/hakimradi/Nextcloud/SlyProjet/SlyAudit et /Users/hakimradi/Nextcloud/SlyProjet/SlyPilot",
+            self.root,
+        )
+        result = coordinate_request(
+            intake,
+            self.root,
+            current_working_directory=self.barberexpert_root,
+            dry_run=True,
+        )
+
+        self.assertFalse(result.decision.allowed)
+        self.assertEqual(result.strategy.name, "ask_clarification")
+        self.assertEqual(result.block_reason, "multiple local paths detected")
 
 
 if __name__ == "__main__":

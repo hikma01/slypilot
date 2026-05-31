@@ -27,6 +27,7 @@ def resolve_project(
     repository_root: Path,
     raw_request: str | None = None,
     current_working_directory: Path | None = None,
+    resource_project_name: str | None = None,
 ) -> ResolvedProject:
     if classification.task_type == "unknown":
         return ResolvedProject(
@@ -42,8 +43,12 @@ def resolve_project(
 
     rules = load_rules(repository_root / "projects.yaml")
     request_candidates = _detect_requested_projects(raw_request or "", rules, current_working_directory)
+    request_candidates_before_resource = list(request_candidates)
     cwd_project = _cwd_project_name(current_working_directory)
     local_project = _local_project_contract_name(current_working_directory)
+
+    if resource_project_name and resource_project_name not in request_candidates:
+        request_candidates = [resource_project_name, *request_candidates]
 
     if len(request_candidates) > 1:
         chosen_project = request_candidates[0]
@@ -61,13 +66,16 @@ def resolve_project(
 
     if request_candidates:
         explicit_project = request_candidates[0]
+        resolution_source = "explicit_request"
+        if resource_project_name and not request_candidates_before_resource:
+            resolution_source = "explicit_path"
         return _build_resolved_project(
             requested_project=explicit_project,
             project_name=explicit_project,
             rules=rules,
             provider_hint=classification.provider_hint,
             environment_hint=classification.environment_hint,
-            resolution_source="explicit_request",
+            resolution_source=resolution_source,
             confidence="high",
             fallback_used=False,
             mismatch_detected=False,
