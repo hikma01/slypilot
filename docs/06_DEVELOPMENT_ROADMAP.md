@@ -5,3 +5,4 @@
 3. Define the Task Packet schema.
 4. Add one provider adapter only when the packet is stable.
 5. Keep history simple: JSONL prompt, packet, response capture.
+6. Freeze V1 and keep later changes evidence-driven only.

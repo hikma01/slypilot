@@ -24,9 +24,55 @@ It does not implement business logic, provider adapters, packet building, redact
 - `schemas/`: validation schema drafts
 - `tests/`: structure validation and baseline test scaffolding
 
+## Current Status
+
+SlyPilot V1 is stabilized.
+
+Validated pieces:
+
+- deterministic intake and classification
+- ARCHI OPS loader and structured index
+- task packet builder with guardrails
+- single-provider adapter
+- simple append-only history
+- offline controlled benchmark for packet value
+
+## Official Commands
+
+### Tests
+
+```bash
+python3 -m unittest discover
+```
+
+### Dry Run
+
+```bash
+python3 -m slypilot.cli "your request here" --dry-run
+```
+
+### Live Run
+
+```bash
+python3 -m slypilot.cli "your request here" --live-run
+```
+
+## Limits
+
+V1 does not include:
+
+- provider routing
+- multi-provider selection
+- embeddings
+- vector search
+- advanced memory
+- automatic history-based selection
+- agent autonomy
+- SQLite-backed persistence
+
 ## Next Step
 
-The next phase should define the smallest useful intake and classification boundaries before any provider integration work.
+Future phases should only expand the system if there is field evidence that a new capability is required.
 
 ## Contract Note
 

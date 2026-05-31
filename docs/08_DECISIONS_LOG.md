@@ -19,3 +19,4 @@
 - Provider integration remains deferred until the index is strengthened.
 - Hermes security validation confirmed the issue was missing coverage plus budget representation.
 - Phase 9 keeps history minimal: append-only JSONL with prompt, packet reference, and optional response text.
+- Phase 10 freezes the V1 architecture and documents the official commands, guarantees, and limits.
