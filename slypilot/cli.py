@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from slypilot.adapters.deepseek_adapter import DeepSeekAdapterError, run_deepseek_live
@@ -19,10 +20,27 @@ def _repo_root() -> Path:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="slypilot")
-    parser.add_argument("request", help="raw user request to classify")
+    parser.add_argument("request", nargs="?", help="raw user request to classify")
     parser.add_argument("--dry-run", action="store_true", help="print the initial detection result")
     parser.add_argument("--live-run", action="store_true", help="send the generated packet to the provider")
     args = parser.parse_args(argv)
+
+    if not args.request:
+        if sys.stdin.isatty():
+            print("SlyPilot ready.")
+            print("Type your request:")
+            try:
+                request = input("> ").strip()
+            except EOFError:
+                return 1
+            if not request:
+                return 1
+            args.request = request
+        else:
+            request = sys.stdin.read().strip()
+            if not request:
+                parser.error("a request is required")
+            args.request = request
 
     root = _repo_root()
     intake = build_intake(args.request, root)
