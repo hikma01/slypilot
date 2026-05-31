@@ -23,10 +23,11 @@ class ClassifierTests(TestCase):
                 text=True,
             )
 
-            payload = json.loads(result.stdout)
-            self.assertEqual(payload["task_type"], "unknown")
-            self.assertEqual(payload["project"], "unknown")
-            self.assertEqual(payload["status"], "needs_technical_request")
+            self.assertIn("SlyPilot attend une tâche technique.", result.stdout)
+            self.assertIn("Exemples :", result.stdout)
+            self.assertNotIn("task_type", result.stdout)
+            self.assertNotIn("project", result.stdout)
+            self.assertNotIn("needs_technical_request", result.stdout)
 
     def test_technical_requests_remain_classified(self) -> None:
         cases = [

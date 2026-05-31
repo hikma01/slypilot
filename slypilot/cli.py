@@ -48,14 +48,12 @@ def main(argv: list[str] | None = None) -> int:
     project = resolve_project(classification, root)
 
     if classification.task_type == "unknown":
-        result = {
-            "task_type": "unknown",
-            "project": "unknown",
-            "provider": "deepseek",
-            "environment": "local",
-            "status": "needs_technical_request",
-        }
-        print(json.dumps(result, ensure_ascii=False))
+        print("SlyPilot attend une tâche technique.")
+        print()
+        print("Exemples :")
+        print("- analyse architecture SlyPilot")
+        print("- corrige bug upload SlyScan")
+        print("- explique problème login Hermes")
         return 0
 
     if args.dry_run:

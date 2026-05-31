@@ -41,7 +41,7 @@ class CliLauncherTests(TestCase):
 
     def test_stdin_request_works_without_args(self) -> None:
         result = subprocess.run(
-            [sys.executable, "-m", "slypilot.cli"],
+            [sys.executable, "-m", "slypilot.cli", "--dry-run"],
             cwd=self.root,
             input="analyse architecture SlyPilot\n",
             check=True,
@@ -49,8 +49,25 @@ class CliLauncherTests(TestCase):
             text=True,
         )
 
-        self.assertIn('"task_type": "architecture"', result.stdout)
-        self.assertIn('"project": "slypilot"', result.stdout)
+        self.assertIn("SLYPILOT DRY RUN", result.stdout)
+        self.assertIn("task_type: architecture", result.stdout)
+        self.assertIn("project: slypilot", result.stdout)
+
+    def test_neutral_input_shows_human_refusal(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "-m", "slypilot.cli"],
+            cwd=self.root,
+            input="bonjour\n",
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("SlyPilot attend une tâche technique.", result.stdout)
+        self.assertIn("Exemples :", result.stdout)
+        self.assertNotIn("task_type", result.stdout)
+        self.assertNotIn("project", result.stdout)
+        self.assertNotIn("needs_technical_request", result.stdout)
 
 
 if __name__ == "__main__":
