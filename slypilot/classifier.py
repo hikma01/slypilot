@@ -9,6 +9,30 @@ from slypilot.intake import Intake
 from slypilot.utils.rule_loader import load_rules
 
 
+TECHNICAL_KEYWORDS = {
+    "bug",
+    "corrige",
+    "fix",
+    "analyse",
+    "architecture",
+    "test",
+    "refactor",
+    "upload",
+    "login",
+    "erreur",
+    "error",
+    "stacktrace",
+    "fichier",
+    "file",
+    "module",
+    "repo",
+    "commit",
+    "cli",
+    "provider",
+    "packet",
+}
+
+
 @dataclass(frozen=True)
 class Classification:
     task_type: str
@@ -20,6 +44,14 @@ class Classification:
 def classify_intake(intake: Intake, repository_root: Path) -> Classification:
     rules = load_rules(repository_root / "rules.yaml")
     request = intake.normalized_request.lower()
+
+    if not _has_technical_signal(request):
+        return Classification(
+            task_type="unknown",
+            project_hint=None,
+            provider_hint=None,
+            environment_hint=None,
+        )
 
     task_type = "patch"
     for candidate in rules["task_type"]["ordered_rules"]:
@@ -45,3 +77,7 @@ def classify_intake(intake: Intake, repository_root: Path) -> Classification:
         provider_hint=provider_hint,
         environment_hint=environment_hint,
     )
+
+
+def _has_technical_signal(request: str) -> bool:
+    return any(keyword in request for keyword in TECHNICAL_KEYWORDS)

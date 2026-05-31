@@ -17,6 +17,9 @@ class ResolvedProject:
 
 
 def resolve_project(classification: Classification, repository_root: Path) -> ResolvedProject:
+    if classification.task_type == "unknown":
+        return ResolvedProject(name="unknown", provider="deepseek", environment="local")
+
     rules = load_rules(repository_root / "projects.yaml")
     project_name = classification.project_hint or rules["default_project"]
     project = rules["projects"].get(project_name, rules["projects"][rules["default_project"]])

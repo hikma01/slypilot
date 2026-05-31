@@ -47,6 +47,17 @@ def main(argv: list[str] | None = None) -> int:
     classification = classify_intake(intake, root)
     project = resolve_project(classification, root)
 
+    if classification.task_type == "unknown":
+        result = {
+            "task_type": "unknown",
+            "project": "unknown",
+            "provider": "deepseek",
+            "environment": "local",
+            "status": "needs_technical_request",
+        }
+        print(json.dumps(result, ensure_ascii=False))
+        return 0
+
     if args.dry_run:
         packet = build_task_packet(intake, classification, project, root)
         append_history(
