@@ -69,6 +69,20 @@ class CliLauncherTests(TestCase):
         self.assertNotIn("project", result.stdout)
         self.assertNotIn("needs_technical_request", result.stdout)
 
+    def test_ambiguous_project_path_shows_reformulation_example(self) -> None:
+        result = subprocess.run(
+            [str(self.launcher), "--dry-run", "analyse /Users/hakimradi/Nextcloud/SlyProjet/SlyAudit et /Users/hakimradi/Nextcloud/SlyProjet/SlyPilot"],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Commande comprise partiellement :", result.stdout)
+        self.assertIn("- ressource détectée :", result.stdout)
+        self.assertIn("Reformule par exemple :", result.stdout)
+        self.assertIn("analyse le projet", result.stdout)
+
 
 if __name__ == "__main__":
     import unittest

@@ -104,6 +104,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  selected_resource: {coordinated.resource.selected_resource}")
         print(f"  intake_status: {coordinated.resource.intake_status}")
         print()
+        selected_resource = coordinated.resource.selected_resource or {}
+        selected_path = selected_resource.get("path", "") if isinstance(selected_resource, dict) else ""
+        selected_type = selected_resource.get("type", "") if isinstance(selected_resource, dict) else ""
+        if selected_path and selected_type == "project_directory":
+            print("Commande comprise partiellement :")
+            print(f"- ressource détectée : {selected_path}")
+            print(f"- type : {selected_type}")
+            print(f"- statut : {coordinated.resource.intake_status}")
+            print()
+            print(f"Reformule par exemple :")
+            print(f"analyse le projet {selected_path}")
+            print()
         print("Please confirm the target project explicitly.")
         return 1
 
