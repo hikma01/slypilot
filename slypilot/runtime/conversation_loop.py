@@ -21,12 +21,13 @@ from slypilot.ui import (
     render_ambiguity_prompt,
     render_cancel_action,
     render_execution_stage,
-    render_final_diagnostic,
+    render_analysis_restitution,
     render_final_failure,
     render_info_followup,
     render_path_missing,
     render_sensitive_path,
     render_packet_summary,
+    TimelineRenderer,
 )
 
 from .session_context import SessionContext
@@ -34,6 +35,8 @@ from .session_manager import SessionManager
 from .session_registry import SessionRegistry, SessionSummary
 from .session_store import SessionStore
 from .pending_action_executor import PendingActionExecutor
+from .execution_events import EventStatus
+from .execution_timeline import ExecutionTimeline
 
 
 def _now() -> str:
@@ -73,6 +76,13 @@ class ConversationLoop:
         self.registry = SessionRegistry(repository_root)
         self.pending_action: dict[str, object] | None = None
         self.pending_executor = PendingActionExecutor()
+        self.timeline_renderer = TimelineRenderer(output_func=self.output)
+
+        def _on_timeline_event(event: "ExecutionEvent") -> None:
+            self.timeline_renderer.render_event(event)
+            self._log_event("system", "execution_event", **event.to_dict())
+
+        self.timeline = ExecutionTimeline(on_event=_on_timeline_event)
 
     @classmethod
     def start(cls, repository_root: Path, cwd: Path, verbose: bool = False) -> int:
@@ -224,11 +234,14 @@ class ConversationLoop:
         if not self.verbose:
             return
         self.output("")
+        self.timeline.emit("RESOURCE_TRACE", "RESOURCE_TRACE", status=EventStatus.SUCCESS)
         self.output(render_resource_trace(coordinated.resource))
         self.output("")
+        self.timeline.emit("COORDINATOR_TRACE", "COORDINATOR_TRACE", status=EventStatus.SUCCESS)
         self.output(render_coordinator_trace(coordinated.trace))
         if packet_metadata is not None:
             self.output("")
+            self.timeline.emit("PACKET_SUMMARY", "PACKET_SUMMARY", status=EventStatus.SUCCESS)
             self.output(render_packet_summary(packet_metadata))
 
     def _should_run_expert_flow(self, coordinated: object) -> bool:
@@ -265,8 +278,11 @@ class ConversationLoop:
             if execution.action == "prepare_project":
                 project_name = str(self.pending_action.get("target", self.pending_action.get("project_name", "")))
                 project_path = str(self.pending_action.get("project_path", self.session.cwd))
+                self.timeline.emit("PROJECT_PREPARATION_STARTED", "Vérification de la préparation", status=EventStatus.RUNNING)
                 preparation = prepare_project(project_path)
                 if preparation.preparation_status == "failed":
+                    reason = preparation.errors[0] if preparation.errors else "préparation impossible"
+                    self.timeline.emit("PROJECT_PREPARATION_COMPLETED", "Préparation du projet", status=EventStatus.FAILED, details=reason)
                     self.output(
                         render_slypilot_message(
                             "Je n'ai pas pu préparer le projet.",
@@ -275,7 +291,7 @@ class ConversationLoop:
                                 f"Chemin : {project_path}",
                                 "",
                                 "Raison :",
-                                preparation.errors[0] if preparation.errors else "préparation impossible",
+                                reason,
                                 "",
                                 "Action recommandée :",
                                 "vérifie le chemin ou les droits d'accès.",
@@ -288,6 +304,7 @@ class ConversationLoop:
                     self.session = self.session_manager.update(pending_action=None)
                     self._sync_registry(status="active")
                     return True
+                self.timeline.emit("PROJECT_PREPARATION_COMPLETED", "Préparation terminée", status=EventStatus.SUCCESS)
                 self.output(
                     render_slypilot_message(
                         "Préparation du projet terminée.",
@@ -298,6 +315,7 @@ class ConversationLoop:
                         ],
                     )
                 )
+                self.timeline.emit("DIAGNOSTIC_STARTED", "Préparation du diagnostic initial", status=EventStatus.RUNNING)
                 self._append_user(raw)
                 self._append_assistant(f"préparation du projet terminée pour {project_name}.")
                 self.pending_action = None
@@ -353,6 +371,7 @@ class ConversationLoop:
         return False
 
     def _handle_message(self, raw: str) -> None:
+        self.timeline.emit("PROJECT_DETECTED", "Détection du projet", status=EventStatus.RUNNING)
         intake = build_intake(raw, self.repository_root)
         coordinated = coordinate_request(
             intake,
@@ -363,6 +382,12 @@ class ConversationLoop:
         )
         project = coordinated.project
         resource = coordinated.resource
+
+        if project.name not in {"unknown", "none"}:
+            self.timeline.emit("PROJECT_DETECTED", "Projet détecté", status=EventStatus.SUCCESS, details=project.name)
+        else:
+            self.timeline.emit("PROJECT_DETECTED", "Détection du projet", status=EventStatus.FAILED, details="Projet inconnu")
+
         self.session = self.session_manager.update(
             last_user_message=raw,
             last_detected_resource=resource.to_dict(),
@@ -410,10 +435,12 @@ class ConversationLoop:
                     self.output(render_execution_stage("Construction du contexte", "en cours"))
                     self.output(render_execution_stage("Analyse", "en cours"))
                     self.output(render_execution_stage("Restitution", "en cours"))
+                    self.timeline.emit("PROJECT_PREPARATION_STARTED", "Vérification de la préparation", status=EventStatus.RUNNING)
                     preparation = prepare_project(project_path)
                     if preparation.preparation_status == "failed":
                         reason = preparation.errors[0] if preparation.errors else "préparation impossible"
                         self.output(render_execution_stage("Préparation du projet", "échec", reason))
+                        self.timeline.emit("PROJECT_PREPARATION_COMPLETED", "Préparation du projet", status=EventStatus.FAILED, details=reason)
                         self.output(render_final_failure(project_label, reason, "Vérifie le chemin ou les droits d’accès."))
                         self._append_assistant("préparation du projet impossible.")
                         self._sync_registry(status="active")
@@ -423,6 +450,21 @@ class ConversationLoop:
                     self.output(render_execution_stage("Construction du contexte", "terminé"))
                     self.output(render_execution_stage("Analyse", "terminé"))
                     self.output(render_execution_stage("Restitution", "terminé"))
+                    self.timeline.emit("PROJECT_PREPARATION_COMPLETED", "Préparation terminée", status=EventStatus.SUCCESS)
+                    self._append_assistant(f"préparation du projet terminée pour {project_label}.")
+                else:
+                    self.timeline.emit("PROJECT_PREPARATION_STARTED", "Vérification de la préparation", status=EventStatus.RUNNING)
+                    self.timeline.emit("PROJECT_PREPARATION_COMPLETED", "Préparation déjà disponible", status=EventStatus.SUCCESS)
+                    self.output(
+                        render_slypilot_message(
+                            f"Projet détecté : {project_label}",
+                            [
+                                f"Chemin : {project_path}",
+                                "",
+                                "Préparation déjà disponible.",
+                            ],
+                        )
+                    )
                     self.output(
                         render_slypilot_message(
                             "Préparation du diagnostic initial...",
@@ -431,22 +473,8 @@ class ConversationLoop:
                             ],
                         )
                     )
-                    self._append_assistant(f"préparation du projet terminée pour {project_label}.")
-                else:
-                    self.output(
-                        render_slypilot_message(
-                            f"Projet détecté : {project_label}",
-                            [
-                                f"Chemin : {project_path}",
-                                "",
-                                "Préparation déjà disponible.",
-                                "",
-                                "Préparation du diagnostic initial...",
-                                "Diagnostic initial basé sur la cartographie locale et le contexte borné.",
-                            ],
-                        )
-                    )
                     self._append_assistant(f"préparation déjà disponible pour {project_label}.")
+
                 if preparation is not None and preparation.preparation_status == "success":
                     self.session = self.session_manager.update(
                         last_project={
@@ -457,6 +485,11 @@ class ConversationLoop:
                             "archiops_status": "present",
                         },
                     )
+
+                self.timeline.emit("CARTOGRAPHY_LOADING", "Chargement de la cartographie", status=EventStatus.RUNNING)
+                self.timeline.emit("CONTEXT_BUILDING", "Construction du contexte", status=EventStatus.RUNNING)
+                self.timeline.emit("DIAGNOSTIC_STARTED", "Préparation du diagnostic initial", status=EventStatus.RUNNING)
+
                 followup = coordinate_request(
                     build_intake(raw, self.repository_root),
                     self.repository_root,
@@ -465,22 +498,37 @@ class ConversationLoop:
                     live_run=False,
                 )
                 if followup.decision.allowed and followup.packet is not None:
+                    map_count = followup.packet.metadata.get("selected_maps_count", 0)
+                    line_count = followup.packet.metadata.get("selected_lines_count", 0)
+
+                    self.timeline.emit("CARTOGRAPHY_LOADED", f"{map_count} cartes chargées", status=EventStatus.SUCCESS)
+                    self.timeline.emit("CONTEXT_READY", f"{line_count} lignes sélectionnées", status=EventStatus.SUCCESS)
+                    self.timeline.emit("DIAGNOSTIC_COMPLETED", "Diagnostic généré", status=EventStatus.SUCCESS)
+
                     try:
                         packet_rel_path = followup.packet.packet_path.relative_to(self.repository_root)
                     except ValueError:
                         packet_rel_path = followup.packet.packet_path
+                    self.output("")
                     self.output(
-                        render_final_diagnostic(
-                            project_label,
+                        render_slypilot_message(
+                            "Préparation du diagnostic initial...",
                             [
-                                "Le projet a été préparé et analysé avec un contexte borné.",
-                                f"Packet généré : {packet_rel_path}",
+                                "Diagnostic initial basé sur la cartographie locale et le contexte borné.",
                             ],
+                        )
+                    )
+                    self.output(
+                        render_analysis_restitution(
+                            project_label,
+                            followup.packet.metadata,
+                            str(packet_rel_path),
                         )
                     )
                     self._append_assistant(f"diagnostic initial prêt pour {project_label}.")
                 else:
                     reason = followup.block_reason or followup.decision.reason or "analyse impossible"
+                    self.timeline.emit("DIAGNOSTIC_COMPLETED", "Préparation du diagnostic initial", status=EventStatus.FAILED, details=reason)
                     self.output(render_final_failure(project_label, reason, "Vérifie le projet ou reformule la demande."))
                     self._append_assistant(f"analyse impossible pour {project_label}: {reason}")
                 self._emit_debug_traces(followup)
@@ -615,6 +663,9 @@ class ConversationLoop:
         )
 
     def _run_followup_analysis(self, project_name: str, project_path: str, raw: str) -> None:
+        self.timeline.emit("CARTOGRAPHY_LOADING", "Chargement de la cartographie", status=EventStatus.RUNNING)
+        self.timeline.emit("CONTEXT_BUILDING", "Construction du contexte", status=EventStatus.RUNNING)
+
         followup = coordinate_request(
             build_intake(raw, self.repository_root),
             self.repository_root,
@@ -623,23 +674,30 @@ class ConversationLoop:
             live_run=False,
         )
         if followup.decision.allowed and followup.packet is not None:
+            map_count = followup.packet.metadata.get("selected_maps_count", 0)
+            line_count = followup.packet.metadata.get("selected_lines_count", 0)
+
+            self.timeline.emit("CARTOGRAPHY_LOADED", f"{map_count} cartes chargées", status=EventStatus.SUCCESS)
+            self.timeline.emit("CONTEXT_READY", f"{line_count} lignes sélectionnées", status=EventStatus.SUCCESS)
+            self.timeline.emit("DIAGNOSTIC_COMPLETED", "Diagnostic généré", status=EventStatus.SUCCESS)
+
             try:
                 packet_rel_path = followup.packet.packet_path.relative_to(self.repository_root)
             except ValueError:
                 packet_rel_path = followup.packet.packet_path
+            self.output("")
             self.output(
-                render_final_diagnostic(
+                render_analysis_restitution(
                     project_name,
-                    [
-                        "Le projet a été préparé et analysé avec un contexte borné.",
-                        f"Packet généré : {packet_rel_path}",
-                    ],
+                    followup.packet.metadata,
+                    str(packet_rel_path),
                 )
             )
             self._append_assistant(f"diagnostic initial prêt pour {project_name}.")
             return
 
         reason = followup.block_reason or followup.decision.reason or "analyse impossible"
+        self.timeline.emit("DIAGNOSTIC_COMPLETED", "Préparation du diagnostic initial", status=EventStatus.FAILED, details=reason)
         self.output(render_final_failure(project_name, reason, "Vérifie le projet ou reformule la demande."))
         self._append_assistant(f"analyse impossible pour {project_name}: {reason}")
 

@@ -40,6 +40,22 @@ class ArchiOpsLoaderTests(unittest.TestCase):
             self.assertIn("ARCHI OPS index missing", result.warnings[0])
             self.assertEqual(result.metadata["files_selected"], 0)
 
+    def test_loader_provides_raw_knowledge_contract(self) -> None:
+        project_root = Path("/Users/hakimradi/Nextcloud/SlyProjet/SlyAudit")
+        result = load_archi_ops_context(self.root, "slyaudit", "debug", "minimal", project_root=project_root)
+        self.assertIsNotNone(result.knowledge_contract)
+        contract = result.knowledge_contract
+        assert contract is not None
+        self.assertIsNotNone(contract.repo_map)
+        self.assertIsNotNone(contract.runtime_map)
+        self.assertIsNotNone(contract.dependency_map)
+        self.assertIsNotNone(contract.semantic_index)
+        self.assertGreater(len(contract.repo_map.content), 0)
+        self.assertGreater(len(contract.runtime_map.content), 0)
+        self.assertGreater(len(contract.dependency_map.content), 0)
+        self.assertGreater(len(contract.semantic_index.content), 0)
+        self.assertEqual(contract.project, "slyaudit")
+
     def test_packet_builder_includes_loader_selections(self) -> None:
         intake = Intake(
             raw_request="corrige bug upload SlyScan",
@@ -70,12 +86,12 @@ class ArchiOpsLoaderTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
-        self.assertIn("SLYPILOT DRY RUN", result.stdout)
-        self.assertIn("Generated Packet:", result.stdout)
+        self.assertIn("Mode brouillon", result.stdout)
+        self.assertIn("Packet généré", result.stdout)
         packet_line = next(
-            line for line in result.stdout.splitlines() if line.startswith("- slypilot/packets/generated/task_")
+            line for line in result.stdout.splitlines() if line.startswith("- Packet généré :")
         )
-        packet_path = self.root / packet_line[2:].strip()
+        packet_path = self.root / packet_line.split(":", 1)[1].strip()
         self.assertTrue(packet_path.exists())
         content = packet_path.read_text(encoding="utf-8")
         self.assertIn("selected_maps:", content)
@@ -92,13 +108,16 @@ class ArchiOpsLoaderTests(unittest.TestCase):
         for request in cases:
             with self.subTest(request=request):
                 result = subprocess.run(
-                    [sys.executable, "-m", "slypilot.cli", request, "--dry-run"],
+                    [sys.executable, "-m", "slypilot.cli", request, "--dry-run", "--verbose"],
                     cwd=self.root,
                     check=True,
                     capture_output=True,
                     text=True,
                 )
                 content = result.stdout
+                self.assertIn("Mode brouillon", content)
+                self.assertIn("Packet généré", content)
+                self.assertIn("PACKET SUMMARY", content)
                 ratio_line = next(
                     line for line in content.splitlines() if line.startswith("context_reduction_ratio:")
                 )
@@ -106,7 +125,7 @@ class ArchiOpsLoaderTests(unittest.TestCase):
                 self.assertGreater(ratio, 10.0)
                 self.assertIn("selected_files_count:", content)
                 self.assertIn("selected_lines_count:", content)
-                self.assertIn("files_excluded_count:", content)
+                self.assertIn("selected_maps:", content)
 
     def test_relevance_bench_compares_human_vs_loader(self) -> None:
         cases = [
@@ -147,26 +166,13 @@ class ArchiOpsLoaderTests(unittest.TestCase):
             ),
         ]
 
-        report = []
         for request, project_id, task_type, profile, expected_files in cases:
             with self.subTest(request=request):
                 result = load_archi_ops_context(self.root, project_id, task_type, profile)
                 selected_files = {item.path for item in result.files}
                 matched_files = selected_files & expected_files
                 precision = len(matched_files) / len(expected_files)
-                report.append(
-                    {
-                        "request": request,
-                        "expected_files_count": len(expected_files),
-                        "matched_files_count": len(matched_files),
-                        "selection_precision": round(precision, 4),
-                    }
-                )
                 self.assertGreaterEqual(len(selected_files), 1)
-
-        # Store a human-readable signal for quick inspection when the bench is rerun.
-        self.assertEqual(len(report), 3)
-        self._relevance_report = report  # type: ignore[attr-defined]
 
 
 if __name__ == "__main__":

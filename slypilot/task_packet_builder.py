@@ -46,11 +46,13 @@ def build_task_packet(
     )
     if project_contract_warning:
         warnings.append(project_contract_warning)
+    project_root = current_working_directory or Path.cwd()
     loader_result = load_archi_ops_context(
         repository_root=repository_root,
         project_id=project.name,
         task_type=classification.task_type,
         context_profile=_context_profile_for_project(project.name),
+        project_root=project_root,
     )
     warnings.extend(loader_result.warnings)
 
@@ -83,6 +85,7 @@ def build_task_packet(
         project_contract=project_contract,
         project_yaml_loaded=project_yaml_loaded,
         project_yaml_path=project_yaml_path,
+        knowledge_contract=loader_result.knowledge_contract,
     )
 
     packet_path.write_text(content, encoding="utf-8")
@@ -110,11 +113,13 @@ def build_task_packet(
         "files_excluded_count": int(loader_metadata.get("files_excluded", 0)),
         "round_trips": 0,
         "negative_context": negative_context,
+        "selected_files": selected_files,
         "selected_maps": selected_maps,
         "selection_reasons": selection_reasons,
         "project_yaml_loaded": project_yaml_loaded,
         "project_yaml_path": str(project_yaml_path),
         "project_contract_injected": bool(project_contract),
+        "knowledge_contract": loader_result.knowledge_contract.to_dict() if loader_result.knowledge_contract else None,
     }
 
     return BuiltPacket(
@@ -249,6 +254,7 @@ def _render_packet(
     project_contract: dict[str, str],
     project_yaml_loaded: bool,
     project_yaml_path: Path,
+    knowledge_contract: object | None,
 ) -> str:
     estimated_raw_context_tokens = int(loader_metadata.get("estimated_raw_context_tokens", 0))
     estimated_packet_tokens = estimate_tokens(
@@ -304,6 +310,34 @@ def _render_packet(
         "allowed_scan_policy: bounded_top_level_only",
         f"activation_status: {project_contract.get('status', 'missing')}" if project_contract else "activation_status: missing",
     ]
+    knowledge_contract_lines = ["- none"]
+    if knowledge_contract and hasattr(knowledge_contract, "to_dict"):
+        knowledge_contract_data = knowledge_contract.to_dict()  # type: ignore[assignment]
+        knowledge_contract_lines = [
+            f"project: {knowledge_contract_data.get('project', 'unknown')}",
+            "",
+            "repo_map:",
+            str(knowledge_contract_data.get("repo_map", None) or "none"),
+            "",
+            "runtime_map:",
+            str(knowledge_contract_data.get("runtime_map", None) or "none"),
+            "",
+            "dependency_map:",
+            str(knowledge_contract_data.get("dependency_map", None) or "none"),
+            "",
+            "semantic_index:",
+            str(knowledge_contract_data.get("semantic_index", None) or "none"),
+            "",
+            "important_files:",
+            *(
+                [f"- {item.get('path', '')}" for item in knowledge_contract_data.get("important_files", [])]
+                if isinstance(knowledge_contract_data.get("important_files", []), list)
+                else ["- none"]
+            ),
+            "",
+            "selection_reason:",
+            str(knowledge_contract_data.get("selection_reason", "none")),
+        ]
     body_lines = [
         "# TASK PACKET",
         "",
@@ -384,6 +418,12 @@ def _render_packet(
         "",
         f"summary: {archi_ops_summary}",
         f"known_issues: {', '.join(item for item in negative_context[:2]) if negative_context else 'none'}",
+        "",
+        "---",
+        "",
+        "## KNOWLEDGE CONTRACT",
+        "",
+        *knowledge_contract_lines,
         "",
         "---",
         "",

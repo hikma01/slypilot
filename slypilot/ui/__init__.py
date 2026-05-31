@@ -1,0 +1,55 @@
+"""Conversation-friendly CLI renderers."""
+
+from .chat_renderer import render_user_message, render_slypilot_message
+from .console_renderer import (
+    render_ambiguous_clarification,
+    render_banner,
+    render_error_message,
+    render_init_message,
+    render_packet_summary,
+    render_technical_request_prompt,
+)
+from .guidance_renderer import (
+    render_ambiguity_prompt,
+    render_archiops_explanation,
+    render_analysis_restitution,
+    render_cancel_action,
+    render_execution_stage,
+    render_final_diagnostic,
+    render_final_failure,
+    render_greeting_prompt,
+    render_init_required_prompt,
+    render_init_confirmation,
+    render_info_followup,
+    render_path_missing,
+    render_sensitive_path,
+)
+from .trace_renderer import render_coordinator_trace, render_resource_trace
+from .timeline_renderer import TimelineRenderer
+
+__all__ = [
+    "render_user_message",
+    "render_slypilot_message",
+    "render_banner",
+    "render_ambiguous_clarification",
+    "render_error_message",
+    "render_init_message",
+    "render_packet_summary",
+    "render_technical_request_prompt",
+    "render_greeting_prompt",
+    "render_init_required_prompt",
+    "render_init_confirmation",
+    "render_cancel_action",
+    "render_execution_stage",
+    "render_final_diagnostic",
+    "render_analysis_restitution",
+    "render_final_failure",
+    "render_info_followup",
+    "render_archiops_explanation",
+    "render_ambiguity_prompt",
+    "render_path_missing",
+    "render_sensitive_path",
+    "render_coordinator_trace",
+    "render_resource_trace",
+    "TimelineRenderer",
+]

@@ -14,8 +14,8 @@ from slypilot.task_packet_builder import BuiltPacket, build_task_packet
 from .coherence_checker import CoherenceResult, check_coherence
 from .decision_engine import Decision, decide
 from .execution_guard import ExecutionGuardResult, guard_execution
-from .intent_analyzer import IntentAnalysis, analyze_intent
-from .coordinator_trace import CoordinatorTrace, ResourceTrace
+from .intent_analyzer import IntentAnalysis, analyze_intent, resolve_intent_with_resource
+from .coordinator_trace import AdvisoryTrace, CoordinatorTrace, ResourceTrace
 from .prompt_loader import load_coordinator_prompt
 from .strategy_selector import StrategySelection, select_strategy
 
@@ -45,6 +45,8 @@ def coordinate_request(
 ) -> CoordinatorResult:
     system_prompt = load_coordinator_prompt(repository_root / "prompts" / "coordinator")
     resource_result = resolve_resources(intake.raw_request, current_working_directory or Path.cwd())
+    intent_fusion = resolve_intent_with_resource(intake, resource_result)
+    advisory = _build_advisory(resource_result, intake, repository_root)
     if resource_result.blocked_paths:
         trace = CoordinatorTrace(
             intent="blocked",
@@ -54,6 +56,11 @@ def coordinate_request(
             archiops="enabled",
             decision="blocked",
             reason="sensitive path blocked",
+            dry_run=dry_run,
+            live_run=live_run,
+            provider_called=False,
+            intent_trace=intent_fusion.to_dict(),
+            advisory=advisory,
         )
         resource_trace = ResourceTrace(
             raw_input=resource_result.raw_input,
@@ -89,6 +96,11 @@ def coordinate_request(
             archiops="enabled",
             decision="ask_clarification",
             reason="multiple local paths detected",
+            dry_run=dry_run,
+            live_run=live_run,
+            provider_called=False,
+            intent_trace=intent_fusion.to_dict(),
+            advisory=advisory,
         )
         resource_trace = ResourceTrace(
             raw_input=resource_result.raw_input,
@@ -124,6 +136,11 @@ def coordinate_request(
             archiops="enabled",
             decision="blocked",
             reason="local path does not exist",
+            dry_run=dry_run,
+            live_run=live_run,
+            provider_called=False,
+            intent_trace=intent_fusion.to_dict(),
+            advisory=advisory,
         )
         resource_trace = ResourceTrace(
             raw_input=resource_result.raw_input,
@@ -151,6 +168,8 @@ def coordinate_request(
             block_reason="local path does not exist",
         )
     intent = analyze_intent(intake, repository_root)
+    if intent_fusion.final_decision == "auto_prepare_then_analyze":
+        intent = IntentAnalysis(task_type="analyze_project", confidence="high", classification=intent.classification)
     project = resolve_project(
         intent.classification,
         repository_root,
@@ -158,6 +177,50 @@ def coordinate_request(
         current_working_directory=current_working_directory,
         resource_project_name=resource_result.project_name,
     )
+    if intent_fusion.final_decision == "ask_project_action_choice" and resource_result.resource_types and resource_result.resource_types[0] in {
+        "project_directory",
+        "git_repository",
+        "archiops_project",
+    }:
+        trace = CoordinatorTrace(
+            intent=intent.task_type,
+            project=project.name,
+            strategy="ask_clarification",
+            provider=project.provider,
+            archiops="enabled",
+            decision="ask_clarification",
+            reason="project path without action verb",
+            dry_run=dry_run,
+            live_run=live_run,
+            provider_called=False,
+            intent_trace=intent_fusion.to_dict(),
+            advisory=advisory,
+        )
+        resource_trace = ResourceTrace(
+            raw_input=resource_result.raw_input,
+            detected_paths=resource_result.detected_paths,
+            normalized_paths=resource_result.normalized_paths,
+            existing_paths=resource_result.existing_paths,
+            missing_paths=resource_result.missing_paths,
+            blocked_paths=resource_result.blocked_paths,
+            resource_types=resource_result.resource_types,
+            selected_resource=resource_result.resource_trace["selected_resource"],
+            intake_status=resource_result.intake_status,
+        )
+        return CoordinatorResult(
+            intake=intake,
+            system_prompt=system_prompt,
+            resource=resource_trace,
+            intent=intent,
+            project=project,
+            coherence=CoherenceResult(False, "project path without action verb"),
+            guard=ExecutionGuardResult(False, "project path without action verb"),
+            strategy=StrategySelection("ask_clarification", "project path without action verb"),
+            decision=Decision(False, "project path without action verb", StrategySelection("ask_clarification", "project path without action verb")),
+            trace=trace,
+            packet=None,
+            block_reason="project path without action verb",
+        )
     coherence = check_coherence(project)
     strategy = select_strategy(intent.task_type, dry_run=dry_run, live_run=live_run)
     guard = guard_execution(coherence, intent.confidence)
@@ -171,6 +234,11 @@ def coordinate_request(
         archiops="enabled",
         decision="blocked" if not decision.allowed else "approved",
         reason=decision.reason,
+        dry_run=dry_run,
+        live_run=live_run,
+        provider_called=False,
+        intent_trace=intent_fusion.to_dict(),
+        advisory=advisory,
     )
     resource_trace = ResourceTrace(
         raw_input=resource_result.raw_input,
@@ -200,12 +268,13 @@ def coordinate_request(
             block_reason=decision.reason,
         )
 
+    packet_project_root = Path(resource_result.project_root) if resource_result.project_root else current_working_directory
     packet = build_task_packet(
         intake,
         intent.classification,
         project,
         repository_root,
-        current_working_directory=current_working_directory,
+        current_working_directory=packet_project_root,
     )
 
     return CoordinatorResult(
@@ -220,4 +289,44 @@ def coordinate_request(
         decision=decision,
         trace=trace,
         packet=packet,
+    )
+
+
+def _build_advisory(resource_result: object, intake: Intake, repository_root: Path) -> AdvisoryTrace:
+    archiops_loaded = (resource_result.project_name is not None) or (repository_root / "archi_ops" / "index.md").exists()
+    project_label = resource_result.project_name or "unknown"
+    if getattr(resource_result, "intake_status", "") == "init_required":
+        return AdvisoryTrace(
+            advisory="recommendation",
+            diagnosis="Projet détecté, ARCHI OPS absent",
+            capability_level="Niveau 0",
+            recommended_action=f"initialiser ARCHI OPS pour {project_label}",
+            alternatives=[
+                "analyse minimale immédiate",
+                "annuler",
+            ],
+            recommendation_reason="Initialiser ARCHI OPS permettra de construire une cartographie durable avant l'analyse complète.",
+            confidence="high",
+        )
+    if archiops_loaded:
+        return AdvisoryTrace(
+            advisory="recommendation",
+            diagnosis="Projet détecté, ARCHI OPS disponible",
+            capability_level="Niveau 1",
+            recommended_action=f"analyser {project_label} avec ARCHI OPS",
+            alternatives=[
+                "analyse minimale",
+                "afficher l’état du projet",
+            ],
+            recommendation_reason="ARCHI OPS fournit déjà la cartographie et les conventions nécessaires pour une analyse bornée.",
+            confidence="high",
+        )
+    return AdvisoryTrace(
+        advisory="recommendation",
+        diagnosis="Contexte insuffisant pour une recommandation forte",
+        capability_level="Niveau 0",
+        recommended_action="demander une clarification",
+        alternatives=["annuler"],
+        recommendation_reason="Le coordinateur ne dispose pas d'un contexte assez fiable pour recommander une action plus ambitieuse.",
+        confidence="medium",
     )

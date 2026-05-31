@@ -28,6 +28,47 @@ class LoaderResult:
     maps: list[SelectionItem]
     metadata: dict[str, object]
     warnings: list[str]
+    knowledge_contract: "KnowledgeContract | None" = None
+
+
+@dataclass(frozen=True)
+class KnowledgeArtifact:
+    path: str
+    content: str
+    reason: str
+    exists: bool
+    size: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "path": self.path,
+            "content": self.content,
+            "reason": self.reason,
+            "exists": self.exists,
+            "size": self.size,
+        }
+
+
+@dataclass(frozen=True)
+class KnowledgeContract:
+    project: str
+    repo_map: KnowledgeArtifact | None
+    runtime_map: KnowledgeArtifact | None
+    dependency_map: KnowledgeArtifact | None
+    semantic_index: KnowledgeArtifact | None
+    important_files: list[KnowledgeArtifact]
+    selection_reason: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "project": self.project,
+            "repo_map": self.repo_map.to_dict() if self.repo_map else None,
+            "runtime_map": self.runtime_map.to_dict() if self.runtime_map else None,
+            "dependency_map": self.dependency_map.to_dict() if self.dependency_map else None,
+            "semantic_index": self.semantic_index.to_dict() if self.semantic_index else None,
+            "important_files": [item.to_dict() for item in self.important_files],
+            "selection_reason": self.selection_reason,
+        }
 
 
 PROFILES: dict[str, ContextProfile] = {
@@ -42,6 +83,7 @@ def load_archi_ops_context(
     project_id: str,
     task_type: str,
     context_profile: str,
+    project_root: Path | None = None,
 ) -> LoaderResult:
     index_path = repository_root / "archi_ops" / "index.yaml"
     warnings: list[str] = []
@@ -60,6 +102,7 @@ def load_archi_ops_context(
     matching_maps = _matching_items(project_data.get("maps", []), task_type)
     files = _select_items(matching_files, profile.max_files, profile.max_lines)
     maps = _select_items(matching_maps, profile.max_files, profile.max_lines)
+    knowledge_contract = _load_knowledge_contract(project_root or repository_root, project_id, files, maps)
 
     selected_lines = sum(item.lines for item in files)
     total_tokens_estimated = _estimate_tokens_for_items(files, maps)
@@ -77,7 +120,13 @@ def load_archi_ops_context(
         "max_lines": profile.max_lines,
     }
 
-    return LoaderResult(files=files, maps=maps, metadata=metadata, warnings=warnings)
+    return LoaderResult(
+        files=files,
+        maps=maps,
+        metadata=metadata,
+        warnings=warnings,
+        knowledge_contract=knowledge_contract,
+    )
 
 
 def _matching_items(items: list[dict[str, object]], task_type: str) -> list[dict[str, object]]:
@@ -132,3 +181,55 @@ def _empty_metadata() -> dict[str, object]:
         "max_files": 0,
         "max_lines": 0,
     }
+
+
+def _load_knowledge_contract(
+    project_root: Path,
+    project_id: str,
+    files: list[SelectionItem],
+    maps: list[SelectionItem],
+) -> KnowledgeContract:
+    def _read(path: str, reason: str) -> KnowledgeArtifact | None:
+        full_path = project_root / path
+        if not full_path.exists():
+            return None
+        content = full_path.read_text(encoding="utf-8")
+        return KnowledgeArtifact(
+            path=path,
+            content=content,
+            reason=reason,
+            exists=True,
+            size=len(content.encode("utf-8")),
+        )
+
+    selected_by_path = {item.path: item.reason for item in [*files, *maps]}
+    repo_map = _read("Documents/ARCHIOPS/repo-map.md", selected_by_path.get("Documents/ARCHIOPS/repo-map.md", "selected"))
+    runtime_map = _read("Documents/ARCHIOPS/runtime-map.md", selected_by_path.get("Documents/ARCHIOPS/runtime-map.md", "selected"))
+    dependency_map = _read(
+        "Documents/ARCHIOPS/dependency-map.md",
+        selected_by_path.get("Documents/ARCHIOPS/dependency-map.md", "selected"),
+    )
+    semantic_index = _read(
+        "Documents/ARCHIOPS/semantic-index.md",
+        selected_by_path.get("Documents/ARCHIOPS/semantic-index.md", "selected"),
+    )
+
+    important_files: list[KnowledgeArtifact] = []
+    for item in files:
+        artifact = _read(item.path, item.reason)
+        if artifact is not None:
+            important_files.append(artifact)
+
+    selection_reason = ", ".join(
+        [item.reason for item in [*files, *maps] if item.reason]
+    ) or "deterministic_loader"
+
+    return KnowledgeContract(
+        project=project_id,
+        repo_map=repo_map,
+        runtime_map=runtime_map,
+        dependency_map=dependency_map,
+        semantic_index=semantic_index,
+        important_files=important_files,
+        selection_reason=selection_reason,
+    )
