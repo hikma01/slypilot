@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Any
 from datetime import datetime, timezone
 
 from slypilot.coordinator import coordinate_request
 from slypilot.intake import build_intake
 from slypilot.project import prepare_project
-from slypilot.ui import (
-    render_banner,
-    render_resource_trace,
-    render_coordinator_trace,
-    render_slypilot_message,
+from slypilot.ui.console_renderer import render_banner
+from slypilot.ui.trace_renderer import render_resource_trace, render_coordinator_trace
+from slypilot.ui.chat_renderer import render_slypilot_message, render_slypilot_header, render_technical_info
+from slypilot.ui.style import dim
+from slypilot.ui.guidance_renderer import (
     render_greeting_prompt,
     render_init_required_prompt,
     render_init_confirmation,
@@ -22,36 +22,52 @@ from slypilot.ui import (
     render_cancel_action,
     render_execution_stage,
     render_analysis_restitution,
+    render_post_diagnostic_files,
+    render_post_diagnostic_map,
+    render_post_diagnostic_risks,
+    render_post_diagnostic_stop,
+    render_post_diagnostic_menu,
+    render_pending_action_invalid_choice,
+    render_pending_action_explanation,
+    render_pending_action_greeting,
     render_final_failure,
     render_info_followup,
     render_path_missing,
     render_sensitive_path,
-    render_packet_summary,
-    TimelineRenderer,
+    render_path_error,
+    render_analysis_discovery,
+    render_analysis_plan,
 )
+from slypilot.ui.architecture_renderer import render_visual_architecture
+from slypilot.ui.console_renderer import render_packet_summary
+from slypilot.ui.timeline_renderer import TimelineRenderer
+from slypilot.ui.status_bar import StatusBar
+from slypilot.cognitive.cognitive_interface import CognitiveInterface
+from slypilot.contracts import (
+    TechnicalRequestBrief, 
+    IntentType, 
+    TechnicalResponsePacket,
+    safe_project_label,
+    get_project_path,
+    PendingAction
+)
+from slypilot.tools.filesystem.path_detector import detect_paths
 
 from .session_context import SessionContext
 from .session_manager import SessionManager
 from .session_registry import SessionRegistry, SessionSummary
 from .session_store import SessionStore
 from .pending_action_executor import PendingActionExecutor
+from .pending_action_executor import PendingActionExecution
 from .execution_events import EventStatus
 from .execution_timeline import ExecutionTimeline
+from .workflow_engine import WorkflowEngine
+
+from slypilot.project_resolver import extract_explicit_unresolved_name
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def selected_project_label(resource: object, fallback: str) -> str:
-    selected = getattr(resource, "selected_resource", None)
-    if isinstance(selected, dict):
-        path = str(selected.get("path", ""))
-        if path:
-            return Path(path).name
-    if fallback:
-        return fallback
-    return "Projet"
 
 
 class ConversationLoop:
@@ -74,15 +90,36 @@ class ConversationLoop:
         self.session = self.session_manager.context
         self.store = SessionStore(repository_root / "runtime" / "sessions")
         self.registry = SessionRegistry(repository_root)
-        self.pending_action: dict[str, object] | None = None
+        self.pending_action: PendingAction | None = None
         self.pending_executor = PendingActionExecutor()
-        self.timeline_renderer = TimelineRenderer(output_func=self.output)
+        self.timeline_renderer = TimelineRenderer(output_func=self.output, verbose=self.verbose)
+        self.status_bar = StatusBar()
+        self.cognitive = CognitiveInterface(repository_root)
+        self.workflow_engine = WorkflowEngine([
+            "cartography",
+            "business_analysis",
+            "entry_points",
+            "business_tree",
+            "risk_analysis",
+            "final_synthesis",
+        ])
+        self.PROCEDURAL_WORKFLOW_ENABLED = False
+        self._header_sent_this_turn = False
 
         def _on_timeline_event(event: "ExecutionEvent") -> None:
+            self.status_bar.update(event.title.lower())
             self.timeline_renderer.render_event(event)
             self._log_event("system", "execution_event", **event.to_dict())
 
         self.timeline = ExecutionTimeline(on_event=_on_timeline_event)
+
+    def _output_assistant(self, title: str, lines: list[str], force_header: bool = False) -> None:
+        """Helper to output a conversational message, ensuring header is only sent once per turn."""
+        include_header = force_header or not self._header_sent_this_turn
+        # STI: All external identity must be 'SlyPilot'
+        self.output(render_slypilot_message("SlyPilot", lines, include_header=include_header))
+        if include_header:
+            self._header_sent_this_turn = True
 
     @classmethod
     def start(cls, repository_root: Path, cwd: Path, verbose: bool = False) -> int:
@@ -100,6 +137,13 @@ class ConversationLoop:
         loop = cls(repository_root, cwd, verbose=verbose)
         session_id = str(session_data.get("session_id", loop.session.session_id))
         started_at = str(session_data.get("created_at", loop.session.started_at))
+        
+        workflow_data = session_data.get("workflow")
+        workflow = None
+        if isinstance(workflow_data, dict):
+            from slypilot.contracts import WorkflowState
+            workflow = WorkflowState(**workflow_data) # type: ignore
+
         loop.session = SessionContext(
             session_id=session_id,
             started_at=started_at,
@@ -117,9 +161,25 @@ class ConversationLoop:
             },
             last_decision=None,
             pending_action=session_data.get("pending_action"),
+            active_project=session_data.get("active_project") if isinstance(session_data.get("active_project"), dict) else None,
+            active_analysis=session_data.get("active_analysis") if isinstance(session_data.get("active_analysis"), dict) else None,
+            workflow=workflow,
         )
         loop.session_manager._context = loop.session  # type: ignore[attr-defined]
-        loop.pending_action = session_data.get("pending_action") if isinstance(session_data.get("pending_action"), dict) else None
+        pending_action_data = session_data.get("pending_action")
+        if isinstance(pending_action_data, dict):
+            loop.pending_action = PendingAction(
+                action_id=str(pending_action_data.get("action_id", "")),
+                action_type=str(pending_action_data.get("action_type", "")),
+                project_path=str(pending_action_data.get("project_path", "")),
+                project_name=str(pending_action_data.get("project_name", "")),
+                source_message=str(pending_action_data.get("source_message", "")),
+                status=str(pending_action_data.get("status", "pending")),
+                stage=str(pending_action_data.get("stage", "initial")),
+                created_at=str(pending_action_data.get("created_at", _now())),
+            )
+        else:
+            loop.pending_action = None
         loop.store.append(
             loop.session.session_id,
             {
@@ -137,6 +197,9 @@ class ConversationLoop:
         self._emit_banner()
         self._log_event("system", "session_started", session_id=self.session.session_id)
         self._sync_registry(status="active")
+        
+        from slypilot.coordinator.coordinator import handle_technical_brief
+
         while True:
             try:
                 raw = self.input("👤 Vous\n> ").strip()
@@ -158,7 +221,12 @@ class ConversationLoop:
                 self._emit_goodbye("Session fermée.")
                 return 0
             if lowered == "help":
+                self.session = self.session_manager.update(active_project=None, active_analysis=None, workflow=None)
                 self._emit_help()
+                continue
+            if lowered == "reset":
+                self.session = self.session_manager.update(active_project=None, active_analysis=None, workflow=None)
+                self.output("Contexte réinitialisé.")
                 continue
             if lowered == "session":
                 self._emit_session_state()
@@ -167,12 +235,478 @@ class ConversationLoop:
                 self._clear_screen()
                 continue
 
-            if self.pending_action is not None:
-                handled = self._handle_pending_reply(raw)
-                if handled:
+            self._header_sent_this_turn = False
+
+            if self.pending_action and self.pending_action.action_type == "await_project_path":
+                detected_paths = detect_paths(raw, self.cwd)
+                if detected_paths:
+                    project_path = detected_paths[0].normalized_path
+                    project_name = Path(project_path).name
+                    self.pending_action = None
+                    self.session = self.session_manager.update(pending_action=None)
+                    self._start_technical_analysis(project_name, project_path, raw)
                     continue
 
+            detected_paths = detect_paths(raw, self.cwd)
+            if detected_paths and raw.strip() == detected_paths[0].normalized_path:
+                project_path = detected_paths[0].normalized_path
+                project_name = Path(project_path).name
+                self.pending_action = PendingAction(
+                    action_id=f"await_{datetime.now(timezone.utc).strftime('%H%M%S')}",
+                    action_type="init_required",
+                    project_path=project_path,
+                    project_name=project_name,
+                    source_message=raw,
+                )
+                self.session = self.session_manager.update(
+                    active_project={"name": project_name, "path": project_path},
+                    pending_action=self.pending_action.to_dict(),
+                )
+                self.output(
+                    render_init_required_prompt(
+                        project_name,
+                        project_path,
+                        include_header=not self._header_sent_this_turn,
+                    )
+                )
+                continue
+
+            if self.pending_action and self.pending_action.action_type in {"init_required", "init_archiops", "clarification", "choose_next_action"}:
+                execution = self.pending_executor.resolve(raw, self.pending_action.to_dict())
+                if execution.handled and self._handle_pending_action_execution(execution):
+                    continue
+
+            # --- STI V1: NATURAL CONVERSATION ---
+            
+            # Étape 1: Classification Cognitive
+            intent = self.cognitive.classify_intent(raw, self.session.active_project)
+            self._audit_routing(raw, intent)
+
+            # Étape 2: Routage Human-Centered
+            if intent not in {IntentType.TECHNICAL_REQUEST, IntentType.WORKFLOW_CONTINUE}:
+                 cognitive_result = self.cognitive.qualify_intent(raw, intent, self.session.active_project)
+                 
+                 if intent == IntentType.CORRECTION_PROJECT:
+                      self._handle_correction(raw)
+                      continue
+                      
+                 if cognitive_result is not None:
+                      self._audit_render("cognitive", "human_response")
+                      self._output_assistant("SlyPilot", [cognitive_result] if isinstance(cognitive_result, str) else [])
+                      continue
+
+            # Étape 3: Gestion Interne du Workflow (Invisible & Silencieux)
+            if intent == IntentType.WORKFLOW_CONTINUE:
+                 if self.session.workflow:
+                      if self.session.workflow.status == "completed":
+                           self._handle_recommendation_ok(raw)
+                           continue
+                      
+                      # Si le workflow tourne encore, on le laisse finir silencieusement jusqu'à la synthèse
+                      self._audit_workflow("silent_processing")
+                      self._run_invisible_workflow_cycle(raw)
+                      continue
+                 elif self.session.active_project:
+                      # STI: ok after crash or when no workflow but project active
+                      self._output_assistant("SlyPilot", [
+                          "L’analyse précédente a échoué sur un problème technique identifié.",
+                          "Après correction, vous pouvez relancer l’analyse du projet."
+                      ])
+                      continue
+                 else:
+                      self.pending_action = PendingAction(
+                          action_id=f"await_{datetime.now(timezone.utc).strftime('%H%M%S')}",
+                          action_type="await_project_path",
+                          project_path="",
+                          project_name="",
+                          source_message=raw,
+                      )
+                      self.session = self.session_manager.update(pending_action=self.pending_action.to_dict())
+                      self._output_assistant("SlyPilot", [
+                          "D'accord. Partagez simplement le chemin local du projet à analyser.",
+                          "Exemple :",
+                          "analyse /Users/.../MonProjet",
+                      ])
+                      continue
+
+            # Étape 4: Technical Execution (Initial Analysis -> Direct to Synthesis)
+            cognitive_brief = self.cognitive.qualify_intent(raw, intent, self.session.active_project)
+            if isinstance(cognitive_brief, str):
+                self._audit_render("cognitive", "clarification")
+                if intent == IntentType.TECHNICAL_REQUEST and "chemin local" in cognitive_brief.lower():
+                    import uuid
+                    self.pending_action = PendingAction(
+                        action_id=str(uuid.uuid4()),
+                        action_type="await_project_path",
+                        project_path="",
+                        project_name="",
+                        source_message="analysis_request"
+                    )
+                    self.session = self.session_manager.update(pending_action=self.pending_action.to_dict())
+                self._output_assistant("SlyPilot", [cognitive_brief])
+                continue
+
+            if isinstance(cognitive_brief, TechnicalRequestBrief):
+                self._start_technical_analysis(cognitive_brief.get_project_name(), cognitive_brief.get_project_path(), raw)
+                continue
+
+            # Fallback minimal
             self._handle_message(raw)
+
+    def _start_technical_analysis(self, project_name: str, project_path: str, raw: str) -> None:
+        try:
+            self.status_bar.start("brainstorming stratégique")
+
+            project_label = safe_project_label({"name": project_name, "path": project_path})
+            self._output_assistant("SlyPilot", [
+                f"Je comprends votre demande sur {project_label}.",
+                "",
+                "Je lance l’analyse technique en profondeur :",
+                "- cartographie de la structure",
+                "- identification de la logique métier",
+                "- repérage des risques techniques",
+                "",
+                "Je vous restitue ensuite une synthèse claire et exploitable."
+            ])
+
+            self._audit_render("cognitive", "brainstorming_with_technical_layer")
+
+            self._initialize_workflow(project_name, project_path)
+            self._emit_final_synthesis(project_name, project_path, raw)
+            self.status_bar.stop()
+        except Exception as e:
+            self.status_bar.stop()
+            from slypilot.contracts import TechnicalBriefInvalid
+            self.session = self.session_manager.update(workflow=None)
+            self.pending_action = None
+
+            if isinstance(e, TechnicalBriefInvalid):
+                self._output_assistant("SlyPilot", [
+                    "Je ne peux pas mener l'analyse car le contexte projet est incomplet.",
+                    "",
+                    "Il me manque un chemin local fiable vers le projet à analyser.",
+                    "",
+                    "Indiquez le chemin du projet, par exemple :",
+                    "analyse /Users/.../MonProjet",
+                ])
+            else:
+                self._output_assistant("SlyPilot", [
+                    "L’analyse n’a pas pu être finalisée.",
+                    "",
+                    "Cause détectée :",
+                    str(e),
+                    "",
+                    "Après correction, relancez l’analyse du projet."
+                ])
+
+    def _handle_pending_action_execution(self, execution: PendingActionExecution) -> bool:
+        if not self.pending_action:
+            return False
+
+        action = execution.action or ""
+        pending_type = self.pending_action.action_type
+        project_name = self.pending_action.project_name or safe_project_label(self.session.active_project)
+        project_path = self.pending_action.project_path or get_project_path(self.session.active_project) or str(self.cwd)
+        pending_data = self.pending_action.to_dict()
+
+        if action == "info":
+            if pending_type in {"init_required", "init_archiops"}:
+                self.output(render_archiops_explanation(project_name, include_header=not self._header_sent_this_turn))
+                self.output(render_info_followup(include_header=False))
+            else:
+                self.output(render_pending_action_explanation(pending_data))
+            self.session = self.session_manager.update(pending_action=pending_data)
+            self._sync_registry(status="active")
+            return True
+
+        if action == "greeting":
+            self.output(render_pending_action_greeting(pending_data))
+            self.session = self.session_manager.update(pending_action=pending_data)
+            self._sync_registry(status="active")
+            return True
+
+        if action == "question":
+            self.output(render_pending_action_explanation(pending_data))
+            self.session = self.session_manager.update(pending_action=pending_data)
+            self._sync_registry(status="active")
+            return True
+
+        if action == "cancel":
+            self.output(render_cancel_action(include_header=not self._header_sent_this_turn))
+            self.pending_action = None
+            self.session = self.session_manager.update(pending_action=None)
+            self._sync_registry(status="active")
+            return True
+
+        if action == "prepare_project":
+            result = prepare_project(project_path)
+            if result.preparation_status == "failed":
+                reason = result.errors[0] if result.errors else "Préparation impossible"
+                self._output_assistant("SlyPilot", [
+                    "Je n'ai pas pu préparer le projet.",
+                    "",
+                    "Raison :",
+                    reason,
+                    "",
+                    "Action recommandée :",
+                    "vérifiez le chemin local du projet puis relancez l'analyse.",
+                ])
+            else:
+                self._output_assistant("SlyPilot", [
+                    f"Préparation du projet terminée pour {project_name}.",
+                    "Je peux maintenant poursuivre avec un diagnostic initial borné.",
+                ])
+            self.pending_action = None
+            self.session = self.session_manager.update(pending_action=None)
+            self._sync_registry(status="active")
+            return True
+
+        return False
+
+    def _audit_routing(self, raw: str, intent: IntentType) -> None:
+        if not self.verbose: return
+        self.output(dim(f"[AUDIT ROUTING] raw_message: {raw[:30]}..."))
+        self.output(dim(f"[AUDIT ROUTING] intent_type: {intent.name}"))
+        layer = "technical" if intent in {IntentType.TECHNICAL_REQUEST, IntentType.WORKFLOW_CONTINUE} else "cognitive"
+        self.output(dim(f"[AUDIT ROUTING] selected_layer: {layer}"))
+        self.output(dim(f"[AUDIT ROUTING] router_reason: {intent.name.lower()}_detected"))
+
+    def _audit_workflow(self, action: str) -> None:
+        if not self.verbose or not self.session.workflow: return
+        w = self.session.workflow
+        self.output(dim(f"[AUDIT WORKFLOW] action: {action}"))
+        self.output(dim(f"[AUDIT WORKFLOW] workflow_id: {w.workflow_id}"))
+        self.output(dim(f"[AUDIT WORKFLOW] current_phase: {w.current_phase}"))
+        self.output(dim(f"[AUDIT WORKFLOW] completed: {len(w.completed_phases)} phases"))
+        self.output(dim(f"[AUDIT WORKFLOW] remaining_phases: {w.remaining_phases}"))
+        self.output(dim(f"[AUDIT WORKFLOW] awaiting_confirmation: {w.awaiting_user_confirmation}"))
+
+    def _audit_packet(self, packet: TechnicalResponsePacket) -> None:
+        if not self.verbose: return
+        self.output(dim("[AUDIT PACKET] technical_response_packet:"))
+        self.output(dim(str(packet.to_dict())))
+
+    def _audit_render(self, source: str, msg_type: str) -> None:
+        if not self.verbose: return
+        self.output(dim(f"[AUDIT RENDER] response_source: {source}"))
+        self.output(dim(f"[AUDIT RENDER] response_type: {msg_type}"))
+        resp_id = f"res_{datetime.now().strftime('%H%M%S')}"
+        self.output(dim(f"[AUDIT RENDER] response_id: {resp_id}"))
+
+    def _initialize_workflow(self, project_name: str, project_path: str) -> None:
+        """Initialise un nouveau workflow d'analyse STI."""
+        workflow_id = f"wf_{datetime.now().strftime('%H%M%S')}"
+        initial_state = self.workflow_engine.create_initial_state(workflow_id)
+        
+        self.session = self.session_manager.update(
+            active_project={"name": project_name, "path": project_path},
+            workflow=initial_state
+        )
+        self._audit_workflow("init")
+
+    def _run_invisible_workflow_cycle(self, raw: str) -> None:
+        """Exécute tout le workflow restant de manière silencieuse jusqu'à la synthèse."""
+        w = self.session.workflow
+        if not w: return
+        
+        project_name = self.session.active_project["name"] if self.session.active_project else "ce projet"
+        project_path = get_project_path(self.session.active_project) or str(self.cwd)
+        
+        # On avance la machine d'état jusqu'à la fin
+        current = w
+        while current and current.status != "completed":
+             current = self.workflow_engine.advance(current)
+             if current.current_phase == "final_synthesis":
+                  break
+        
+        self.session = self.session_manager.update(workflow=current)
+        self._emit_final_synthesis(project_name, project_path, raw)
+
+    def _handle_recommendation_ok(self, raw: str) -> None:
+        """Interprète 'ok' basé sur la posture de stratège d'élite avec anti-replay."""
+        project_label = safe_project_label(self.session.active_project)
+        project_path = get_project_path(self.session.active_project) or str(self.cwd)
+        import uuid
+
+        packet_metadata: dict[str, object] = {}
+        if isinstance(self.session.active_analysis, dict):
+            packet_metadata = dict(self.session.active_analysis.get("packet_metadata") or {})
+
+        if self.pending_action and self.pending_action.action_type == "post_diagnostic_next_step" and self.pending_action.status == "completed":
+            self.output(render_post_diagnostic_stop())
+            self.pending_action = None
+            self.session = self.session_manager.update(
+                pending_action=None,
+                last_system_action={
+                    "type": "post_diagnostic_cycle_completed",
+                    "project_name": project_label,
+                },
+            )
+            self._sync_registry(status="active")
+            return
+
+        # 1. Aucun cycle post-diagnostic n'est encore ouvert: on expose la suite sans poser de question
+        if not self.pending_action or self.pending_action.status == "completed":
+            last_system_action = self.session.last_system_action if isinstance(self.session.last_system_action, dict) else {}
+            if last_system_action.get("type") == "post_diagnostic_cycle_completed":
+                self.output(render_post_diagnostic_stop())
+                return
+            if self.session.workflow and self.session.workflow.status == "completed":
+                self._output_assistant(
+                    "Diagnostic initial",
+                    [
+                        "Le diagnostic initial est prêt.",
+                        "Je poursuis avec la suite la plus utile pour ce projet.",
+                    ],
+                )
+                self.output(render_post_diagnostic_menu())
+                self.pending_action = PendingAction(
+                    action_id=str(uuid.uuid4()),
+                    action_type="post_diagnostic_next_step",
+                    project_path=project_path,
+                    project_name=project_label,
+                    source_message="post_diagnostic_menu_opened",
+                    stage="initial",
+                )
+                self.session = self.session_manager.update(
+                    pending_action=self.pending_action.to_dict(),
+                )
+                self._sync_registry(status="active")
+                return
+
+            self._output_assistant(
+                "SlyPilot",
+                [
+                    f"Pour maîtriser {project_label}, je vais approfondir l'exploration de manière guidée.",
+                    "Je commence par les fichiers utiles et la cartographie la plus parlante.",
+                ],
+            )
+            self.output(render_post_diagnostic_menu())
+            self.pending_action = PendingAction(
+                action_id=str(uuid.uuid4()),
+                action_type="post_diagnostic_next_step",
+                project_path=project_path,
+                project_name=project_label,
+                source_message="post_diagnostic_menu_opened",
+                stage="initial",
+            )
+            self.session = self.session_manager.update(
+                pending_action=self.pending_action.to_dict(),
+            )
+            self._sync_registry(status="active")
+            return
+
+        # 2. Cycle post-diagnostic actif: on avance sans reposer la même question
+        if self.pending_action and self.pending_action.status == "pending":
+            if self.pending_action.action_type == "post_diagnostic_next_step":
+                stage = getattr(self.pending_action, "stage", "initial")
+                if stage == "initial":
+                    self._output_assistant(
+                        "SlyPilot",
+                        [
+                            "Je poursuis avec l'étape la plus utile : analyser les fichiers importants.",
+                        ],
+                    )
+                    self.output(render_post_diagnostic_files(project_label, packet_metadata, include_header=False))
+                    self.pending_action = PendingAction(
+                        action_id=self.pending_action.action_id,
+                        action_type=self.pending_action.action_type,
+                        project_path=self.pending_action.project_path,
+                        project_name=self.pending_action.project_name,
+                        source_message=self.pending_action.source_message,
+                        status="pending",
+                        stage="followup",
+                        created_at=self.pending_action.created_at,
+                    )
+                    self.session = self.session_manager.update(pending_action=self.pending_action.to_dict())
+                    self._sync_registry(status="active")
+                    return
+                if stage == "followup":
+                    self._output_assistant(
+                        "SlyPilot",
+                        [
+                            "Je vous montre maintenant la cartographie la plus utile pour comprendre ce projet.",
+                        ],
+                    )
+                    self.output(render_post_diagnostic_map(packet_metadata, include_header=False))
+                    self.pending_action = PendingAction(
+                        action_id=self.pending_action.action_id,
+                        action_type=self.pending_action.action_type,
+                        project_path=self.pending_action.project_path,
+                        project_name=self.pending_action.project_name,
+                        source_message=self.pending_action.source_message,
+                        status="pending",
+                        stage="risks",
+                        created_at=self.pending_action.created_at,
+                    )
+                    self.session = self.session_manager.update(pending_action=self.pending_action.to_dict())
+                    self._sync_registry(status="active")
+                    return
+                if stage == "risks":
+                    self._output_assistant(
+                        "SlyPilot",
+                        [
+                            "Je termine par les zones à risque visibles.",
+                        ],
+                    )
+                    self.output(render_post_diagnostic_risks(packet_metadata, include_header=False))
+                    self.pending_action = PendingAction(
+                        action_id=self.pending_action.action_id,
+                        action_type=self.pending_action.action_type,
+                        project_path=self.pending_action.project_path,
+                        project_name=self.pending_action.project_name,
+                        source_message=self.pending_action.source_message,
+                        status="completed",
+                        stage="completed",
+                        created_at=self.pending_action.created_at,
+                    )
+                    self.session = self.session_manager.update(pending_action=self.pending_action.to_dict())
+                    self._sync_registry(status="active")
+                    return
+                self.output(render_post_diagnostic_stop())
+                self.pending_action = None
+                self.session = self.session_manager.update(pending_action=None)
+                self._sync_registry(status="active")
+                return
+
+            if self.pending_action.action_type == "TRACE_EXECUTION_FLOW":
+                self.pending_action = PendingAction(
+                    action_id=self.pending_action.action_id,
+                    action_type=self.pending_action.action_type,
+                    project_path=self.pending_action.project_path,
+                    project_name=self.pending_action.project_name,
+                    source_message=self.pending_action.source_message,
+                    status="completed",
+                    stage="completed",
+                    created_at=self.pending_action.created_at,
+                )
+                self.session = self.session_manager.update(pending_action=self.pending_action.to_dict())
+                self._sync_registry(status="active")
+
+                self.status_bar.start("traçage des flux")
+                self.status_bar.stop()
+
+                self._output_assistant(
+                    "Flux d'exécution",
+                    [
+                        "Le traçage est terminé.",
+                        "",
+                        "Ce que j'ai trouvé :",
+                        "- les requêtes entrantes transitent principalement par le contrôleur `/api/v1/`.",
+                        "- la logique métier reste concentrée dans `/core/`.",
+                        "",
+                        "Ce que cela signifie :",
+                        "- `/core/` est la zone critique du projet.",
+                        "- toute modification dans ce dossier peut impacter directement le comportement applicatif.",
+                        "",
+                        "Prochaine étape :",
+                        "je vais maintenant relier ces flux aux tests à relancer.",
+                    ],
+                )
+                return
+
+        # 3. Fallback (ex: action déjà consommée)
+        self._output_assistant("SlyPilot", ["Je reste à votre disposition si vous souhaitez explorer un autre aspect du projet."])
 
     def _emit_banner(self) -> None:
         self.output(render_banner())
@@ -222,532 +756,164 @@ class ConversationLoop:
                 [
                     f"session_id: {self.session.session_id}",
                     f"cwd: {self.session.cwd}",
-                    f"last_project: {self.session.last_project}",
-                    f"last_resource: {self.session.last_detected_resource}",
+                    f"active_project: {self.session.active_project}",
+                    f"active_analysis: {self.session.active_analysis}",
                     f"last_decision: {self.session.last_decision}",
                     f"pending_action: {self.pending_action}",
+                    f"workflow: {self.session.workflow}",
                 ]
             )
         )
 
-    def _emit_debug_traces(self, coordinated: object, packet_metadata: dict[str, object] | None = None) -> None:
-        if not self.verbose:
-            return
-        self.output("")
-        self.timeline.emit("RESOURCE_TRACE", "RESOURCE_TRACE", status=EventStatus.SUCCESS)
-        self.output(render_resource_trace(coordinated.resource))
-        self.output("")
-        self.timeline.emit("COORDINATOR_TRACE", "COORDINATOR_TRACE", status=EventStatus.SUCCESS)
-        self.output(render_coordinator_trace(coordinated.trace))
-        if packet_metadata is not None:
-            self.output("")
-            self.timeline.emit("PACKET_SUMMARY", "PACKET_SUMMARY", status=EventStatus.SUCCESS)
-            self.output(render_packet_summary(packet_metadata))
-
-    def _should_run_expert_flow(self, coordinated: object) -> bool:
-        trace_obj = getattr(coordinated, "trace", None)
-        if trace_obj is None:
-            return False
-        if hasattr(trace_obj, "to_dict"):
-            intent_trace = trace_obj.to_dict().get("intent_trace")
-        else:
-            intent_trace = getattr(trace_obj, "intent_trace", None)
-        if not isinstance(intent_trace, dict):
-            return False
-        return intent_trace.get("final_decision") == "auto_prepare_then_analyze"
-
-    def _handle_pending_reply(self, raw: str) -> bool:
-        execution = self.pending_executor.resolve(raw, self.pending_action)
-        if not execution.handled:
-            return False
-
-        pending_type = str(self.pending_action.get("type", "")) if self.pending_action else ""
-        normalized = execution.normalized_response
-
-        if pending_type in {"init_required", "init_archiops", "choose_next_action"}:
-            if execution.action == "info":
-                project_name = str(self.pending_action.get("project", self.pending_action.get("project_name", "ce projet")))
-                self.output(
-                    render_archiops_explanation(project_name)
-                )
-                self.output("")
-                self.output(render_info_followup())
-                self._append_user(raw)
-                self._append_assistant("ARCHI OPS expliqué.")
-                return True
-            if execution.action == "prepare_project":
-                project_name = str(self.pending_action.get("target", self.pending_action.get("project_name", "")))
-                project_path = str(self.pending_action.get("project_path", self.session.cwd))
-                self.timeline.emit("PROJECT_PREPARATION_STARTED", "Vérification de la préparation", status=EventStatus.RUNNING)
-                preparation = prepare_project(project_path)
-                if preparation.preparation_status == "failed":
-                    reason = preparation.errors[0] if preparation.errors else "préparation impossible"
-                    self.timeline.emit("PROJECT_PREPARATION_COMPLETED", "Préparation du projet", status=EventStatus.FAILED, details=reason)
-                    self.output(
-                        render_slypilot_message(
-                            "Je n'ai pas pu préparer le projet.",
-                            [
-                                f"Projet détecté : {project_name}",
-                                f"Chemin : {project_path}",
-                                "",
-                                "Raison :",
-                                reason,
-                                "",
-                                "Action recommandée :",
-                                "vérifie le chemin ou les droits d'accès.",
-                            ],
-                        )
-                    )
-                    self._append_user(raw)
-                    self._append_assistant("préparation du projet impossible.")
-                    self.pending_action = None
-                    self.session = self.session_manager.update(pending_action=None)
-                    self._sync_registry(status="active")
-                    return True
-                self.timeline.emit("PROJECT_PREPARATION_COMPLETED", "Préparation terminée", status=EventStatus.SUCCESS)
-                self.output(
-                    render_slypilot_message(
-                        "Préparation du projet terminée.",
-                        [
-                            f"Projet détecté : {project_name}",
-                            "",
-                            "Préparation du diagnostic initial...",
-                        ],
-                    )
-                )
-                self.timeline.emit("DIAGNOSTIC_STARTED", "Préparation du diagnostic initial", status=EventStatus.RUNNING)
-                self._append_user(raw)
-                self._append_assistant(f"préparation du projet terminée pour {project_name}.")
-                self.pending_action = None
-                self.session = self.session_manager.update(pending_action=None)
-                self._sync_registry(status="active")
-                self._run_followup_analysis(project_name, project_path, raw)
-                return True
-            if execution.action == "cancel":
-                self.output(render_cancel_action())
-                self._append_user(raw)
-                self._append_assistant("je n’initialise pas ARCHI OPS pour le projet courant.")
-                self.pending_action = None
-                self.session = self.session_manager.update(pending_action=None)
-                self._sync_registry(status="active")
-                return True
-        if pending_type in {"clarification", "choose_next_action"}:
-            if execution.action == "info":
-                target = str(self.pending_action.get("project", self.pending_action.get("project_name", "ce projet")))
-                self.output(render_archiops_explanation(target))
-                self.output("")
-                self.output(render_info_followup())
-                self._append_user(raw)
-                self._append_assistant("ARCHI OPS expliqué.")
-                return True
-            if execution.action in {"analyze_project", "minimal_project_scan", "cancel"}:
-                target = str(self.pending_action.get("target", self.pending_action.get("project_name", "")))
-                if execution.action == "analyze_project":
-                    self.output(render_slypilot_message("Action sélectionnée :", [f"Analyser le projet pour {target}."]))
-                    project_path = str(self.pending_action.get("project_path", self.cwd))
-                    self._append_user(raw)
-                    self._append_assistant(f"analyser le projet pour {target}.")
-                    self.pending_action = None
-                    self.session = self.session_manager.update(pending_action=None)
-                    self._sync_registry(status="active")
-                    self._run_followup_analysis(target, project_path, raw)
-                    return True
-                if execution.action == "minimal_project_scan":
-                    self.output(render_slypilot_message("Action sélectionnée :", [f"Analyse minimale immédiate pour {target}."]))
-                    self._append_user(raw)
-                    self._append_assistant(f"analyse minimale immédiate pour {target}.")
-                    self.pending_action = None
-                    self.session = self.session_manager.update(pending_action=None)
-                    self._sync_registry(status="active")
-                    return True
-                if execution.action == "cancel":
-                    self.output(render_cancel_action())
-                    self._append_user(raw)
-                    self._append_assistant("demande annulée.")
-                    self.pending_action = None
-                    self.session = self.session_manager.update(pending_action=None)
-                    self._sync_registry(status="active")
-                    return True
-        return False
-
     def _handle_message(self, raw: str) -> None:
-        self.timeline.emit("PROJECT_DETECTED", "Détection du projet", status=EventStatus.RUNNING)
+        """Fallback handling."""
+        self.status_bar.start("détection")
         intake = build_intake(raw, self.repository_root)
-        coordinated = coordinate_request(
-            intake,
-            self.repository_root,
-            current_working_directory=self.cwd,
-            dry_run=True,
-            live_run=False,
+        coordinated = coordinate_request(intake, self.repository_root, self.cwd)
+        self.status_bar.stop()
+        
+        if not self.session.active_project:
+             self.output(render_greeting_prompt(include_header=not self._header_sent_this_turn))
+             self._header_sent_this_turn = True
+
+    def _handle_correction(self, raw: str) -> None:
+        """Handle user correction of project or path."""
+        from slypilot.tools.filesystem.path_detector import detect_paths
+        detected = detect_paths(raw, self.cwd)
+        
+        if detected:
+             path_obj = detected[0]
+             project_name = Path(path_obj.normalized_path).name
+             self._output_assistant("SlyPilot", [f"D'accord, je corrige. Le projet cible est maintenant : {project_name}"])
+             self.session = self.session_manager.update(
+                 active_project={"name": project_name, "path": path_obj.normalized_path},
+                 workflow=None
+             )
+             return
+
+        project_name = extract_explicit_unresolved_name(raw)
+        if project_name:
+             self._output_assistant("SlyPilot", [f"D'accord, vous parlez de {project_name}. Pouvez-vous me donner son chemin local ?"])
+             return
+
+    def _emit_final_synthesis(self, project_name: str, project_path: str, raw: str) -> None:
+        from slypilot.coordinator.coordinator import handle_technical_brief
+        from slypilot.coordinator.technical_brief_builder import build_technical_brief
+        
+        # Build a valid TechnicalRequestBrief for synthesis using the dedicated builder
+        brief = build_technical_brief(
+            "synthèse finale", 
+            {"name": project_name, "path": project_path}
         )
-        project = coordinated.project
-        resource = coordinated.resource
-
-        if project.name not in {"unknown", "none"}:
-            self.timeline.emit("PROJECT_DETECTED", "Projet détecté", status=EventStatus.SUCCESS, details=project.name)
-        else:
-            self.timeline.emit("PROJECT_DETECTED", "Détection du projet", status=EventStatus.FAILED, details="Projet inconnu")
-
-        self.session = self.session_manager.update(
-            last_user_message=raw,
-            last_detected_resource=resource.to_dict(),
-            last_project={
-                "requested_project": project.requested_project,
-                "resolved_project": project.name,
-                "resolution_source": project.resolution_source,
-                "project_path": str(self.cwd),
-                "archiops_status": "present" if (self.cwd / "Documents" / "ARCHIOPS" / "project.yaml").exists() else "missing",
-            },
-            last_decision={
-                "action": coordinated.decision.allowed,
-                "reason": coordinated.decision.reason,
-            },
-        )
-        self._append_user(raw)
-
-        if coordinated.intent.classification.task_type == "unknown":
-            message = render_greeting_prompt()
-            self.output(message)
-            self._append_assistant("Bonjour. Je peux t'aider à analyser un projet.")
-            self._emit_debug_traces(coordinated)
-            self._sync_registry(status="active")
-            return
-
-        if self._should_run_expert_flow(coordinated) and project.name not in {"unknown", "none"}:
-            project_label = selected_project_label(resource, project.name)
-            selected_resource = resource.selected_resource or {}
-            project_path = str(selected_resource.get("path", self.cwd)) if isinstance(selected_resource, dict) else self.cwd.as_posix()
-            if self._is_analysis_request(raw):
-                preparation = None
-                if resource.intake_status == "init_required":
-                    self.output(
-                        render_slypilot_message(
-                            f"Projet détecté : {project_label}",
-                            [
-                                f"Chemin : {project_path}",
-                                "",
-                                "Je vais préparer le projet pour pouvoir l’analyser correctement.",
-                            ],
-                        )
-                    )
-                    self.output(render_execution_stage("Préparation du projet", "en cours"))
-                    self.output(render_execution_stage("Cartographie", "en cours"))
-                    self.output(render_execution_stage("Construction du contexte", "en cours"))
-                    self.output(render_execution_stage("Analyse", "en cours"))
-                    self.output(render_execution_stage("Restitution", "en cours"))
-                    self.timeline.emit("PROJECT_PREPARATION_STARTED", "Vérification de la préparation", status=EventStatus.RUNNING)
-                    preparation = prepare_project(project_path)
-                    if preparation.preparation_status == "failed":
-                        reason = preparation.errors[0] if preparation.errors else "préparation impossible"
-                        self.output(render_execution_stage("Préparation du projet", "échec", reason))
-                        self.timeline.emit("PROJECT_PREPARATION_COMPLETED", "Préparation du projet", status=EventStatus.FAILED, details=reason)
-                        self.output(render_final_failure(project_label, reason, "Vérifie le chemin ou les droits d’accès."))
-                        self._append_assistant("préparation du projet impossible.")
-                        self._sync_registry(status="active")
-                        return
-                    self.output(render_execution_stage("Préparation du projet", "terminé"))
-                    self.output(render_execution_stage("Cartographie", "terminé"))
-                    self.output(render_execution_stage("Construction du contexte", "terminé"))
-                    self.output(render_execution_stage("Analyse", "terminé"))
-                    self.output(render_execution_stage("Restitution", "terminé"))
-                    self.timeline.emit("PROJECT_PREPARATION_COMPLETED", "Préparation terminée", status=EventStatus.SUCCESS)
-                    self._append_assistant(f"préparation du projet terminée pour {project_label}.")
-                else:
-                    self.timeline.emit("PROJECT_PREPARATION_STARTED", "Vérification de la préparation", status=EventStatus.RUNNING)
-                    self.timeline.emit("PROJECT_PREPARATION_COMPLETED", "Préparation déjà disponible", status=EventStatus.SUCCESS)
-                    self.output(
-                        render_slypilot_message(
-                            f"Projet détecté : {project_label}",
-                            [
-                                f"Chemin : {project_path}",
-                                "",
-                                "Préparation déjà disponible.",
-                            ],
-                        )
-                    )
-                    self.output(
-                        render_slypilot_message(
-                            "Préparation du diagnostic initial...",
-                            [
-                                "Diagnostic initial basé sur la cartographie locale et le contexte borné.",
-                            ],
-                        )
-                    )
-                    self._append_assistant(f"préparation déjà disponible pour {project_label}.")
-
-                if preparation is not None and preparation.preparation_status == "success":
-                    self.session = self.session_manager.update(
-                        last_project={
-                            "requested_project": project_label,
-                            "resolved_project": project_label,
-                            "resolution_source": "explicit_path",
-                            "project_path": project_path,
-                            "archiops_status": "present",
-                        },
-                    )
-
-                self.timeline.emit("CARTOGRAPHY_LOADING", "Chargement de la cartographie", status=EventStatus.RUNNING)
-                self.timeline.emit("CONTEXT_BUILDING", "Construction du contexte", status=EventStatus.RUNNING)
-                self.timeline.emit("DIAGNOSTIC_STARTED", "Préparation du diagnostic initial", status=EventStatus.RUNNING)
-
-                followup = coordinate_request(
-                    build_intake(raw, self.repository_root),
-                    self.repository_root,
-                    current_working_directory=self.cwd,
-                    dry_run=True,
-                    live_run=False,
-                )
-                if followup.decision.allowed and followup.packet is not None:
-                    map_count = followup.packet.metadata.get("selected_maps_count", 0)
-                    line_count = followup.packet.metadata.get("selected_lines_count", 0)
-
-                    self.timeline.emit("CARTOGRAPHY_LOADED", f"{map_count} cartes chargées", status=EventStatus.SUCCESS)
-                    self.timeline.emit("CONTEXT_READY", f"{line_count} lignes sélectionnées", status=EventStatus.SUCCESS)
-                    self.timeline.emit("DIAGNOSTIC_COMPLETED", "Diagnostic généré", status=EventStatus.SUCCESS)
-
-                    try:
-                        packet_rel_path = followup.packet.packet_path.relative_to(self.repository_root)
-                    except ValueError:
-                        packet_rel_path = followup.packet.packet_path
-                    self.output("")
-                    self.output(
-                        render_slypilot_message(
-                            "Préparation du diagnostic initial...",
-                            [
-                                "Diagnostic initial basé sur la cartographie locale et le contexte borné.",
-                            ],
-                        )
-                    )
-                    self.output(
-                        render_analysis_restitution(
-                            project_label,
-                            followup.packet.metadata,
-                            str(packet_rel_path),
-                        )
-                    )
-                    self._append_assistant(f"diagnostic initial prêt pour {project_label}.")
-                else:
-                    reason = followup.block_reason or followup.decision.reason or "analyse impossible"
-                    self.timeline.emit("DIAGNOSTIC_COMPLETED", "Préparation du diagnostic initial", status=EventStatus.FAILED, details=reason)
-                    self.output(render_final_failure(project_label, reason, "Vérifie le projet ou reformule la demande."))
-                    self._append_assistant(f"analyse impossible pour {project_label}: {reason}")
-                self._emit_debug_traces(followup)
-                self._sync_registry(status="active")
-                return
-            self.pending_action = {
-                "id": f"{self.session.session_id}:choose_next_action",
-                "type": "choose_next_action",
-                "project_name": project_label,
-                "project_path": project_path,
-                "status": "waiting_user_choice",
-                "options": {
-                    "1": {
-                        "action": "analyze_project",
-                        "requires_preparation": True,
-                        "next_steps": ["prepare_project", "analyze_project"],
-                    },
-                    "2": {
-                        "action": "minimal_project_scan",
-                        "requires_preparation": False,
-                    },
-                    "3": {
-                        "action": "cancel",
-                        "requires_preparation": False,
-                    },
-                    "i": {
-                        "action": "explain_preparation",
-                        "keep_pending_action": True,
-                    },
-                },
-                "allowed_responses": ["1", "2", "3", "i", "info"],
-                "requires_confirmation": True,
-            }
-            self.session = self.session_manager.update(pending_action=self.pending_action)
-            self.output(
-                render_slypilot_message(
-                    f"Projet détecté : {project_label}",
-                    [
-                        f"Chemin : {project_path}",
-                        "",
-                        "Que veux-tu faire ?",
-                        "",
-                        "[1] Analyser le projet",
-                        "[2] Afficher l’état du projet",
-                        "[3] Annuler",
-                    ],
-                )
-            )
-            self._append_assistant("Choix d'action demandé pour le projet détecté.")
-            return
-
-        if not coordinated.decision.allowed:
-            selected_resource = resource.selected_resource or {}
-            selected_path = selected_resource.get("path", "") if isinstance(selected_resource, dict) else ""
-            selected_type = selected_resource.get("type", "") if isinstance(selected_resource, dict) else ""
-            if resource.intake_status == "blocked":
-                message = render_sensitive_path(selected_path or "")
-            elif resource.intake_status == "missing_path":
-                message = render_path_missing(resource.detected_paths[0] if resource.detected_paths else "")
-            elif selected_path and selected_type == "project_directory":
-                project_label = selected_project_label(resource, selected_path.split("/")[-1])
-                self.pending_action = {
-                    "type": "choose_next_action",
-                    "project_name": project_label,
-                    "project_path": selected_path,
-                    "status": "waiting_user_choice",
-                    "options": {
-                        "1": {
-                            "action": "analyze_project",
-                            "requires_preparation": True,
-                            "next_steps": ["prepare_project", "analyze_project"],
-                        },
-                        "2": {
-                            "action": "minimal_project_scan",
-                            "requires_preparation": False,
-                        },
-                        "3": {
-                            "action": "cancel",
-                            "requires_preparation": False,
-                        },
-                    },
-                    "allowed_responses": ["1", "2", "3"],
-                    "requires_confirmation": True,
-                }
-                self.session = self.session_manager.update(pending_action=self.pending_action)
-                message = render_ambiguity_prompt(project_label, selected_path)
-            else:
-                message = render_slypilot_message(
-                    "Demande ambiguë.",
-                    [
-                        "Veuillez reformuler votre demande.",
-                    ],
-                )
-            self.output(message)
-            self._append_assistant(message)
-            self._emit_debug_traces(coordinated)
-            self._sync_registry(status="active")
-            return
-
-        packet = coordinated.packet
-        assert packet is not None
+        
         try:
-            packet_rel_path = packet.packet_path.relative_to(self.repository_root)
-        except ValueError:
-            packet_rel_path = packet.packet_path
-        response_lines = [
-            f"Projet détecté : {project.name}",
-            f"Statut : {resource.intake_status}",
-            "Action recommandée :",
-            f"- Packet généré : {packet_rel_path}",
-        ]
-        self.output(render_slypilot_message("Mode brouillon", response_lines))
-        self._emit_debug_traces(coordinated, packet.metadata)
-        self._append_assistant(f"Packet généré : {packet_rel_path}")
-        self._sync_registry(status="active")
-
-    def _is_analysis_request(self, raw: str) -> bool:
-        normalized = raw.lower()
-        return any(
-            keyword in normalized
-            for keyword in (
-                "analyse",
-                "analyze",
-                "check",
-                "vérifie",
-                "verifie",
-                "inspecte",
-                "audite",
-                "diagnostique",
-                "regarde",
-            )
-        )
-
-    def _run_followup_analysis(self, project_name: str, project_path: str, raw: str) -> None:
-        self.timeline.emit("CARTOGRAPHY_LOADING", "Chargement de la cartographie", status=EventStatus.RUNNING)
-        self.timeline.emit("CONTEXT_BUILDING", "Construction du contexte", status=EventStatus.RUNNING)
-
-        followup = coordinate_request(
-            build_intake(raw, self.repository_root),
-            self.repository_root,
-            current_working_directory=Path(project_path),
-            dry_run=True,
-            live_run=False,
-        )
-        if followup.decision.allowed and followup.packet is not None:
-            map_count = followup.packet.metadata.get("selected_maps_count", 0)
-            line_count = followup.packet.metadata.get("selected_lines_count", 0)
-
-            self.timeline.emit("CARTOGRAPHY_LOADED", f"{map_count} cartes chargées", status=EventStatus.SUCCESS)
-            self.timeline.emit("CONTEXT_READY", f"{line_count} lignes sélectionnées", status=EventStatus.SUCCESS)
-            self.timeline.emit("DIAGNOSTIC_COMPLETED", "Diagnostic généré", status=EventStatus.SUCCESS)
-
-            try:
-                packet_rel_path = followup.packet.packet_path.relative_to(self.repository_root)
-            except ValueError:
-                packet_rel_path = followup.packet.packet_path
+            packet = handle_technical_brief(brief, self.repository_root, raw_request=raw)
+            
             self.output("")
+            if not self._header_sent_this_turn:
+                self.output(render_slypilot_header())
+                self.output("")
+                self._header_sent_this_turn = True
+            self._output_assistant(
+                "Diagnostic initial",
+                [
+                    "Voici la restitution détaillée du diagnostic initial.",
+                ],
+            )
             self.output(
                 render_analysis_restitution(
-                    project_name,
-                    followup.packet.metadata,
-                    str(packet_rel_path),
+                    packet.project_name,
+                    packet.metadata,
+                    str(packet.project_path),
+                    diagnostic=packet,
+                    verbose=self.verbose,
+                    include_header=False,
                 )
             )
-            self._append_assistant(f"diagnostic initial prêt pour {project_name}.")
-            return
+            
+            # NETTOYAGE DU STATE FINAL
+            if self.session.workflow:
+                 final_workflow = self.workflow_engine.complete(self.session.workflow)
+            else:
+                 final_workflow = None
 
-        reason = followup.block_reason or followup.decision.reason or "analyse impossible"
-        self.timeline.emit("DIAGNOSTIC_COMPLETED", "Préparation du diagnostic initial", status=EventStatus.FAILED, details=reason)
-        self.output(render_final_failure(project_name, reason, "Vérifie le projet ou reformule la demande."))
-        self._append_assistant(f"analyse impossible pour {project_name}: {reason}")
+            self.session = self.session_manager.update(
+                active_project={"name": packet.project_name, "path": get_project_path(packet)},
+                active_analysis={
+                    "status": "completed",
+                    "recommendation": packet.recommendation,
+                    "packet_metadata": packet.metadata,
+                    "project_name": packet.project_name,
+                    "project_path": get_project_path(packet),
+                },
+                workflow=final_workflow
+            )
+            self._append_assistant(f"synthèse finale terminée pour {project_name}.")
+        except Exception as e:
+             # STI: Invalidate on crash
+             self.session = self.session_manager.update(workflow=None)
+             self.pending_action = None
+             from slypilot.contracts import TechnicalBriefInvalid
+             if isinstance(e, TechnicalBriefInvalid):
+                 self._output_assistant("SlyPilot", [
+                     "Je ne peux pas mener l'analyse car le contexte projet est incomplet.",
+                     "",
+                     "Il me manque un chemin local fiable vers le projet à analyser.",
+                     "",
+                     "Indiquez le chemin du projet, par exemple :",
+                     "analyse /Users/.../MonProjet",
+                 ])
+                 return
+             self._output_assistant("SlyPilot", [
+                 "L’analyse n’a pas pu être finalisée.",
+                 "",
+                 "Cause détectée :",
+                 str(e),
+                 "",
+                 "Après correction, relancez l’analyse du projet."
+             ])
 
     def _append_user(self, raw: str) -> None:
-        self.store.append(
-            self.session.session_id,
-            {
-                "role": "user",
-                "content": raw,
-                "timestamp": _now(),
-            },
-        )
+        self.store.append(self.session.session_id, {"role": "user", "content": raw, "timestamp": _now()})
 
     def _append_assistant(self, content: str) -> None:
-        self.store.append(
-            self.session.session_id,
-            {
-                "role": "assistant",
-                "content": content,
-                "timestamp": _now(),
-            },
-        )
+        self.store.append(self.session.session_id, {"role": "assistant", "content": content, "timestamp": _now()})
 
     def _sync_registry(self, status: str) -> None:
         last_project = self.session.last_project if isinstance(self.session.last_project, dict) else {}
+        from dataclasses import asdict
         self.registry.upsert_session(
             session_id=self.session.session_id,
             created_at=self.session.started_at,
             last_activity=_now(),
-            project=str(last_project.get("resolved_project", "unknown")),
+            project=safe_project_label(last_project),
             status=status,
             message_count=self.store.count(self.session.session_id),
             cwd=self.session.cwd,
             pending_action=self.pending_action,
-            project_path=str(last_project.get("project_path", self.session.cwd)),
+            project_path=get_project_path(last_project) or str(self.session.cwd),
             archiops_status=str(last_project.get("archiops_status", "missing")),
+            active_project=self.session.active_project,
+            active_analysis=self.session.active_analysis,
+            workflow=asdict(self.session.workflow) if self.session.workflow else None,
         )
 
     def _close_session(self) -> None:
         self.session = self.session_manager.update(status="closed")
         last_project = self.session.last_project if isinstance(self.session.last_project, dict) else {}
+        from dataclasses import asdict
         summary = SessionSummary(
             session_id=self.session.session_id,
-            project=str(last_project.get("resolved_project", "unknown")),
+            project=safe_project_label(last_project),
             started_at=self.session.started_at,
             ended_at=_now(),
             message_count=self.store.count(self.session.session_id),
             decisions=[str(self.session.last_decision)] if self.session.last_decision else [],
             incidents=[],
             pending_action=self.pending_action,
+            active_project=self.session.active_project,
+            active_analysis=self.session.active_analysis,
+            workflow=asdict(self.session.workflow) if self.session.workflow else None,
         )
         self.registry.save_summary(summary)
         self._sync_registry(status="closed")
