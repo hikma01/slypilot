@@ -31,6 +31,12 @@ def initialize_project_with_index(project_root: Path, index_path: Path) -> InitR
     project_name = project_root.name.lower()
     archiops_path = project_root / ARCHIOPS_RELATIVE_PATH
     archiops_path.mkdir(parents=True, exist_ok=True)
+    slypilot_dir = project_root / ".slypilot"
+    slypilot_dir.mkdir(parents=True, exist_ok=True)
+    memory_path = slypilot_dir / "project_memory.json"
+    created_memory = not memory_path.exists()
+    if not memory_path.exists():
+        _write_file(memory_path, json.dumps({"projects": {}}, ensure_ascii=False, indent=2) + "\n")
 
     cartography = generate_cartography(project_root, project_name)
     created_files = [
@@ -38,8 +44,12 @@ def initialize_project_with_index(project_root: Path, index_path: Path) -> InitR
         _write_file(archiops_path / "repo-map.md", cartography.repo_map),
         _write_file(archiops_path / "runtime-map.md", cartography.runtime_map),
         _write_file(archiops_path / "dependency-map.md", cartography.dependency_map),
+        _write_file(archiops_path / "interpreted-tree.md", cartography.interpreted_tree),
         _write_file(archiops_path / "semantic-index.md", cartography.semantic_index),
+        _write_file(archiops_path / "business-map.md", cartography.business_map),
     ]
+    if created_memory:
+        created_files.append(memory_path)
 
     warnings = _update_global_index(project_name, project_root, index_path)
 
@@ -121,6 +131,20 @@ def _update_global_index(project_name: str, project_root: Path, index_path: Path
                 "task_types": ["architecture", "debug", "patch", "review", "docs"],
                 "weight": 80,
                 "reason": "semantic_surface",
+                "lines": 40,
+            },
+            {
+                "path": "Documents/ARCHIOPS/interpreted-tree.md",
+                "task_types": ["architecture", "debug", "patch", "review", "docs"],
+                "weight": 80,
+                "reason": "interpreted_tree_surface",
+                "lines": 40,
+            },
+            {
+                "path": "Documents/ARCHIOPS/business-map.md",
+                "task_types": ["architecture", "debug", "patch", "review", "docs"],
+                "weight": 80,
+                "reason": "business_logic_surface",
                 "lines": 40,
             },
         ],

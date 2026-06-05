@@ -30,6 +30,8 @@ class CartographyServiceTests(TestCase):
             self.assertIn("node", result.detected_runtimes)
             self.assertIn("api", result.detected_domains)
             self.assertIn("tests", result.detected_domains)
+            self.assertIn("INTERPRETED TREE", result.interpreted_tree)
+            self.assertIn("## BUSINESS MODULES", result.interpreted_tree)
 
 
 if __name__ == "__main__":

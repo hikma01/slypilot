@@ -43,6 +43,7 @@ from slypilot.ui.console_renderer import render_packet_summary
 from slypilot.ui.timeline_renderer import TimelineRenderer
 from slypilot.ui.status_bar import StatusBar
 from slypilot.cognitive.cognitive_interface import CognitiveInterface
+from slypilot.project import ProjectMemory, ProjectMemoryStore
 from slypilot.contracts import (
     TechnicalRequestBrief, 
     IntentType, 
@@ -95,6 +96,8 @@ class ConversationLoop:
         self.timeline_renderer = TimelineRenderer(output_func=self.output, verbose=self.verbose)
         self.status_bar = StatusBar()
         self.cognitive = CognitiveInterface(repository_root)
+        self.project_memory_store = ProjectMemoryStore(repository_root)
+        self.current_project_memory: ProjectMemory | None = None
         self.workflow_engine = WorkflowEngine([
             "cartography",
             "business_analysis",
@@ -180,6 +183,11 @@ class ConversationLoop:
             )
         else:
             loop.pending_action = None
+        active_analysis = loop.session.active_analysis if isinstance(loop.session.active_analysis, dict) else None
+        if isinstance(active_analysis, dict):
+            project_memory_data = active_analysis.get("project_memory")
+            if isinstance(project_memory_data, dict):
+                loop.current_project_memory = ProjectMemory.from_dict(project_memory_data)
         loop.store.append(
             loop.session.session_id,
             {
@@ -527,6 +535,7 @@ class ConversationLoop:
         project_label = safe_project_label(self.session.active_project)
         project_path = get_project_path(self.session.active_project) or str(self.cwd)
         import uuid
+        project_memory = self._current_project_memory(project_path)
 
         packet_metadata: dict[str, object] = {}
         if isinstance(self.session.active_analysis, dict):
@@ -552,12 +561,12 @@ class ConversationLoop:
                 self.output(render_post_diagnostic_stop())
                 return
             if self.session.workflow and self.session.workflow.status == "completed":
+                guidance = ["Le diagnostic initial est prêt.", "Je poursuis avec la suite la plus utile pour ce projet."]
+                if project_memory and project_memory.architecture_summary:
+                    guidance.insert(1, f"Cartographie mémorisée : {project_memory.architecture_summary}")
                 self._output_assistant(
                     "Diagnostic initial",
-                    [
-                        "Le diagnostic initial est prêt.",
-                        "Je poursuis avec la suite la plus utile pour ce projet.",
-                    ],
+                    guidance,
                 )
                 self.output(render_post_diagnostic_menu())
                 self.pending_action = PendingAction(
@@ -578,6 +587,7 @@ class ConversationLoop:
                 "SlyPilot",
                 [
                     f"Pour maîtriser {project_label}, je vais approfondir l'exploration de manière guidée.",
+                    *( [f"Je m'appuie sur la mémoire projet déjà construite : {project_memory.architecture_summary}"] if project_memory and project_memory.architecture_summary else [] ),
                     "Je commence par les fichiers utiles et la cartographie la plus parlante.",
                 ],
             )
@@ -601,10 +611,13 @@ class ConversationLoop:
             if self.pending_action.action_type == "post_diagnostic_next_step":
                 stage = getattr(self.pending_action, "stage", "initial")
                 if stage == "initial":
+                    lead_in = "Je poursuis avec l'étape la plus utile : analyser les fichiers importants."
+                    if project_memory and project_memory.previous_findings:
+                        lead_in = f"Je poursuis depuis la cartographie déjà construite. {project_memory.previous_findings[0]}"
                     self._output_assistant(
                         "SlyPilot",
                         [
-                            "Je poursuis avec l'étape la plus utile : analyser les fichiers importants.",
+                            lead_in,
                         ],
                     )
                     self.output(render_post_diagnostic_files(project_label, packet_metadata, include_header=False))
@@ -622,10 +635,13 @@ class ConversationLoop:
                     self._sync_registry(status="active")
                     return
                 if stage == "followup":
+                    lead_in = "Je vous montre maintenant la cartographie la plus utile pour comprendre ce projet."
+                    if project_memory and project_memory.risks:
+                        lead_in = f"Je vous montre maintenant la cartographie la plus utile pour comprendre ce projet. Risque déjà retenu : {project_memory.risks[0]}"
                     self._output_assistant(
                         "SlyPilot",
                         [
-                            "Je vous montre maintenant la cartographie la plus utile pour comprendre ce projet.",
+                            lead_in,
                         ],
                     )
                     self.output(render_post_diagnostic_map(packet_metadata, include_header=False))
@@ -643,10 +659,13 @@ class ConversationLoop:
                     self._sync_registry(status="active")
                     return
                 if stage == "risks":
+                    lead_in = "Je termine par les zones à risque visibles."
+                    if project_memory and project_memory.active_recommendation:
+                        lead_in = f"Je termine par les zones à risque visibles. Recommandation mémorisée : {project_memory.active_recommendation}"
                     self._output_assistant(
                         "SlyPilot",
                         [
-                            "Je termine par les zones à risque visibles.",
+                            lead_in,
                         ],
                     )
                     self.output(render_post_diagnostic_risks(packet_metadata, include_header=False))
@@ -796,6 +815,23 @@ class ConversationLoop:
              self._output_assistant("SlyPilot", [f"D'accord, vous parlez de {project_name}. Pouvez-vous me donner son chemin local ?"])
              return
 
+    def _current_project_memory(self, project_path: str | None = None) -> ProjectMemory | None:
+        if self.current_project_memory and (
+            not project_path or self.current_project_memory.project_path == project_path
+        ):
+            return self.current_project_memory
+
+        target_path = project_path
+        if not target_path and isinstance(self.session.active_project, dict):
+            target_path = str(self.session.active_project.get("path", "") or "")
+        if not target_path:
+            return self.current_project_memory
+
+        loaded = self.project_memory_store.load(target_path)
+        if loaded:
+            self.current_project_memory = loaded
+        return loaded
+
     def _emit_final_synthesis(self, project_name: str, project_path: str, raw: str) -> None:
         from slypilot.coordinator.coordinator import handle_technical_brief
         from slypilot.coordinator.technical_brief_builder import build_technical_brief
@@ -808,28 +844,104 @@ class ConversationLoop:
         
         try:
             packet = handle_technical_brief(brief, self.repository_root, raw_request=raw)
-            
+
+            project_memory = None
+            if isinstance(packet.metadata, dict):
+                project_memory_data = packet.metadata.get("project_memory")
+                if isinstance(project_memory_data, dict):
+                    project_memory = ProjectMemory.from_dict(project_memory_data)
+            if project_memory is None:
+                project_memory = self.project_memory_store.load(get_project_path(packet) or project_path)
+            if project_memory is not None:
+                self.current_project_memory = project_memory
+                if isinstance(packet.metadata, dict):
+                    packet.metadata["project_memory"] = project_memory.to_dict()
+
+            translated = self.cognitive.translate_response(packet)
             self.output("")
             if not self._header_sent_this_turn:
                 self.output(render_slypilot_header())
                 self.output("")
                 self._header_sent_this_turn = True
+            intro_lines = [f"Projet détecté : {packet.project_name}"]
+            if isinstance(packet.metadata, dict) and packet.metadata.get("project_yaml_loaded"):
+                intro_lines.append("Préparation déjà disponible.")
+            else:
+                intro_lines.append("Je vais préparer le projet pour pouvoir l’analyser correctement.")
             self._output_assistant(
                 "Diagnostic initial",
                 [
+                    *intro_lines,
+                    "",
                     "Voici la restitution détaillée du diagnostic initial.",
+                    "",
+                    *translated.splitlines(),
                 ],
             )
-            self.output(
-                render_analysis_restitution(
-                    packet.project_name,
-                    packet.metadata,
-                    str(packet.project_path),
-                    diagnostic=packet,
-                    verbose=self.verbose,
-                    include_header=False,
+            if self.verbose:
+                resource_trace = None
+                coordinator_trace = None
+                if isinstance(packet.metadata, dict):
+                    resource_trace = packet.metadata.get("resource_trace")
+                    coordinator_trace = packet.metadata.get("coordinator_trace")
+                if resource_trace is None:
+                    resource_trace = {
+                        "raw_input": raw,
+                        "detected_paths": [project_path] if project_path else [],
+                        "normalized_paths": [project_path] if project_path else [],
+                        "existing_paths": [project_path] if project_path else [],
+                        "missing_paths": [],
+                        "blocked_paths": [],
+                        "resource_types": ["project_directory"] if project_path else [],
+                        "selected_resource": {
+                            "path": project_path,
+                            "type": "project_directory",
+                            "exists": bool(project_path),
+                            "policy_status": "allowed",
+                        },
+                        "intake_status": "success" if project_path else "unknown",
+                    }
+                if coordinator_trace is None:
+                    intent_trace = {}
+                    if isinstance(packet.metadata, dict):
+                        intent_trace = packet.metadata.get("intent_trace") or {}
+                    if not intent_trace:
+                        intent_trace = {
+                            "raw_input": raw,
+                            "normalized_input": raw.lower().strip(),
+                            "detected_action_terms": ["analyse"] if "analyse" in raw.lower() else [],
+                            "detected_intent": "analyze_project" if "analyse" in raw.lower() else "technical_request",
+                            "intent_confidence": 0.95,
+                            "detected_paths": [project_path] if project_path else [],
+                            "resource_type": "project_directory" if project_path else "unknown",
+                            "project_name": packet.project_name.lower(),
+                            "fusion_result": "analysis_request_with_project_path" if project_path else "technical_request_without_path",
+                            "final_decision": "auto_prepare_then_analyze" if project_path else "ask_clarification",
+                            "ambiguity_reason": None,
+                        }
+                    coordinator_trace = {
+                        "intent": "analyze_project",
+                        "project": packet.project_name,
+                        "strategy": "memory-guided-analysis",
+                        "provider": "local",
+                        "archiops": "enabled" if packet.metadata.get("knowledge_contract") else "disabled",
+                        "decision": packet.status,
+                        "reason": ", ".join(packet.errors) if packet.errors else packet.recommendation,
+                        "intent_trace": intent_trace,
+                        "advisory": packet.metadata.get("advisory_trace") if isinstance(packet.metadata, dict) else {},
+                    }
+                self.output(render_resource_trace(resource_trace or {}))
+                self.output(render_coordinator_trace(coordinator_trace or {}))
+                self.output(
+                    render_analysis_restitution(
+                        packet.project_name,
+                        packet.metadata,
+                        str(packet.project_path),
+                        diagnostic=packet,
+                        verbose=self.verbose,
+                        include_header=False,
+                    )
                 )
-            )
             
             # NETTOYAGE DU STATE FINAL
             if self.session.workflow:
@@ -845,6 +957,7 @@ class ConversationLoop:
                     "packet_metadata": packet.metadata,
                     "project_name": packet.project_name,
                     "project_path": get_project_path(packet),
+                    "project_memory": project_memory.to_dict() if project_memory else None,
                 },
                 workflow=final_workflow
             )
@@ -865,7 +978,7 @@ class ConversationLoop:
                  ])
                  return
              self._output_assistant("SlyPilot", [
-                 "L’analyse n’a pas pu être finalisée.",
+                 "Analyse impossible.",
                  "",
                  "Cause détectée :",
                  str(e),

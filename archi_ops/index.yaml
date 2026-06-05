@@ -2,115 +2,119 @@
   "version": 1,
   "projects": {
     "slypilot": {
+      "root": "/Users/hakimradi/Nextcloud/SlyProjet/SlyPilot",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
       "files": [
-        {
-          "path": "docs/01_ARCHITECTURE.md",
-          "task_types": [
-            "architecture"
-          ],
-          "weight": 90,
-          "lines": 120,
-          "reason": "task_relevance=critical"
-        },
-        {
-          "path": "docs/02_TASK_PACKET_STANDARD.md",
-          "task_types": [
-            "debug",
-            "patch",
-            "review",
-            "docs"
-          ],
-          "weight": 80,
-          "lines": 140,
-          "reason": "task_relevance=high"
-        },
-        {
-          "path": "docs/03_ARCHI_OPS_INDEX.md",
-          "task_types": [
-            "architecture",
-            "debug",
-            "patch",
-            "review",
-            "docs"
-          ],
-          "weight": 70,
-          "lines": 80,
-          "reason": "task_relevance=structural"
-        },
-        {
-          "path": "docs/11_CONTEXT_SELECTION_CONTRACT.md",
-          "task_types": [
-            "architecture",
-            "debug",
-            "patch",
-            "review",
-            "docs"
-          ],
-          "weight": 75,
-          "lines": 80,
-          "reason": "task_relevance=contract_support"
-        },
-        {
-          "path": "docs/10_ARCHIOPS_INTEGRATION_AUDIT.md",
-          "task_types": [
-            "architecture",
-            "debug",
-            "patch",
-            "review",
-            "docs"
-          ],
-          "weight": 65,
-          "lines": 120,
-          "reason": "task_relevance=integration_audit"
-        },
-        {
-          "path": "docs/00_PROJECT_OVERVIEW.md",
-          "task_types": [
-            "explain",
-            "docs"
-          ],
-          "weight": 60,
-          "lines": 60,
-          "reason": "task_relevance=overview"
-        },
         {
           "path": "README.md",
           "task_types": [
             "architecture",
             "docs"
           ],
-          "weight": 50,
+          "weight": 100,
           "lines": 80,
-          "reason": "task_relevance=entrypoint"
+          "reason": "repo_overview"
+        },
+        {
+          "path": "docs/43_ARCHIOPS_DEPLOYMENT_MODEL.md",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 98,
+          "lines": 80,
+          "reason": "deployment_model"
+        },
+        {
+          "path": "docs/41_PROJECT_MEMORY_V1.md",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 96,
+          "lines": 80,
+          "reason": "project_memory"
+        },
+        {
+          "path": "docs/42_STI_ARCHITECTURAL_INTEGRITY_AUDIT.md",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 94,
+          "lines": 80,
+          "reason": "architectural_integrity_audit"
+        },
+        {
+          "path": "slypilot/project/project_memory.py",
+          "task_types": [
+            "architecture",
+            "debug"
+          ],
+          "weight": 92,
+          "lines": 80,
+          "reason": "memory_engine"
+        },
+        {
+          "path": "slypilot/project/project_preparation_service.py",
+          "task_types": [
+            "architecture",
+            "debug"
+          ],
+          "weight": 90,
+          "lines": 80,
+          "reason": "bootstrap_service"
         }
       ],
       "maps": [
         {
-          "path": "archi_ops/index.md",
+          "path": "Documents/ARCHIOPS/project.yaml",
           "task_types": [
             "architecture",
-            "debug",
-            "patch",
-            "review",
             "docs"
           ],
           "weight": 100,
-          "reason": "entrypoint"
+          "reason": "project_registration",
+          "lines": 20
         },
         {
-          "path": "docs/11_CONTEXT_SELECTION_CONTRACT.md",
+          "path": "Documents/ARCHIOPS/repo-map.md",
           "task_types": [
             "architecture",
             "debug",
             "patch",
             "review",
             "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
           ],
           "weight": 85,
-          "reason": "contract"
+          "reason": "dependency_surface",
+          "lines": 40
         },
         {
-          "path": "docs/10_ARCHIOPS_INTEGRATION_AUDIT.md",
+          "path": "Documents/ARCHIOPS/semantic-index.md",
           "task_types": [
             "architecture",
             "debug",
@@ -118,8 +122,35 @@
             "review",
             "docs"
           ],
-          "weight": 75,
-          "reason": "audit"
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/interpreted-tree.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "interpreted_tree_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/business-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "business_logic_surface",
+          "lines": 40
         }
       ]
     },
@@ -132,7 +163,7 @@
             "patch"
           ],
           "weight": 100,
-          "lines": 60,
+          "lines": 140,
           "reason": "task_relevance=critical_runtime"
         },
         {
@@ -368,6 +399,1349 @@
           ],
           "weight": 80,
           "reason": "semantic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "tmpv_jb2lie": {
+      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmpv_jb2lie",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "slyaudit": {
+      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmpnubwqx29/SlyAudit",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/business-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "business_logic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "tmp6gneula0": {
+      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmp6gneula0",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "tmp5zlv7n01": {
+      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmp5zlv7n01",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "tmppfqv1try": {
+      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmppfqv1try",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "tmp_ps66mp8": {
+      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmp_ps66mp8",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "slycrm": {
+      "root": "/Users/hakimradi/Nextcloud/SlyProjet/SlyCRM",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "tmpzuc0oqo_": {
+      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmpzuc0oqo_",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "tmpxkb95xui": {
+      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmpxkb95xui",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "demoproject": {
+      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmp_wv4hnye/DemoProject",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/interpreted-tree.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "interpreted_tree_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/business-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "business_logic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "tmpg8lgh6de": {
+      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmpg8lgh6de",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/interpreted-tree.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "interpreted_tree_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/business-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "business_logic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "tmpk7027ucp": {
+      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmpk7027ucp",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/interpreted-tree.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "interpreted_tree_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/business-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "business_logic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "tmpoj9z8afl": {
+      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmpoj9z8afl",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/interpreted-tree.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "interpreted_tree_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/business-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "business_logic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "bootstrapdemo": {
+      "root": "/Users/hakimradi/Nextcloud/SlyProjet/tmp15o42v2u/BootstrapDemo",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/interpreted-tree.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "interpreted_tree_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/business-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "business_logic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "tmpocph1nfe": {
+      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmpocph1nfe",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/interpreted-tree.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "interpreted_tree_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/business-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "business_logic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "tmp1n1vc9qf": {
+      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmp1n1vc9qf",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/interpreted-tree.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "interpreted_tree_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/business-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "business_logic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "tmpg397hlkx": {
+      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmpg397hlkx",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/interpreted-tree.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "interpreted_tree_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/business-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "business_logic_surface",
           "lines": 40
         }
       ]
