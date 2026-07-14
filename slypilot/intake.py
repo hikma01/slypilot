@@ -14,7 +14,7 @@ class Intake:
 
 
 def build_intake(raw_request: str, repository_root: Path) -> Intake:
-    normalized_request = " ".join(raw_request.strip().split())
+    normalized_request = " ".join(raw_request.strip().split()).lower()
     return Intake(
         raw_request=raw_request,
         normalized_request=normalized_request,

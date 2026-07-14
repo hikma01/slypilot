@@ -36,8 +36,8 @@ class CliLauncherTests(TestCase):
             text=True,
         )
 
-        self.assertIn("SLYPILOT DRY RUN", result.stdout)
-        self.assertIn("Generated Packet:", result.stdout)
+        self.assertIn("Mode brouillon", result.stdout)
+        self.assertIn("Packet généré", result.stdout)
 
     def test_stdin_request_works_without_args(self) -> None:
         result = subprocess.run(
@@ -49,9 +49,9 @@ class CliLauncherTests(TestCase):
             text=True,
         )
 
-        self.assertIn("SLYPILOT DRY RUN", result.stdout)
-        self.assertIn("task_type: architecture", result.stdout)
-        self.assertIn("project: slypilot", result.stdout)
+        self.assertIn("Mode brouillon", result.stdout)
+        self.assertIn("Projet détecté : slypilot", result.stdout)
+        self.assertIn("Packet généré", result.stdout)
 
     def test_neutral_input_shows_human_refusal(self) -> None:
         result = subprocess.run(
@@ -63,8 +63,8 @@ class CliLauncherTests(TestCase):
             text=True,
         )
 
-        self.assertIn("SlyPilot attend une tâche technique.", result.stdout)
-        self.assertIn("Exemples :", result.stdout)
+        self.assertIn("Bonjour.", result.stdout)
+        self.assertIn("Je peux t'aider", result.stdout)
         self.assertNotIn("task_type", result.stdout)
         self.assertNotIn("project", result.stdout)
         self.assertNotIn("needs_technical_request", result.stdout)
@@ -78,10 +78,11 @@ class CliLauncherTests(TestCase):
         )
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Commande comprise partiellement :", result.stdout)
-        self.assertIn("- ressource détectée :", result.stdout)
-        self.assertIn("Reformule par exemple :", result.stdout)
-        self.assertIn("analyse le projet", result.stdout)
+        self.assertIn("J'ai détecté une ressource locale", result.stdout)
+        self.assertIn("Projet détecté :", result.stdout)
+        self.assertIn("Alternatives :", result.stdout)
+        self.assertIn("Choix conseillé :", result.stdout)
+        self.assertIn("1. analyser le projet", result.stdout)
 
 
 if __name__ == "__main__":

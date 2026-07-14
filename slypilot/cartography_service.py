@@ -33,6 +33,10 @@ ALLOWED_TOP_LEVEL_FILES = {
     "main.py",
     "app.py",
     "server.py",
+    "backend.py",
+    "api.py",
+    "worker.py",
+    "index.html",
 }
 
 EXCLUDED_TOP_LEVELS = {
@@ -67,8 +71,8 @@ def generate_cartography(project_root: Path, project_name: str) -> CartographyRe
     detected_domains = _detect_domains(top_level_entries)
     
     # Entry Points Detector & Business Map heuristics
-    detected_entry_points = _detect_entry_points(top_level_entries)
-    detected_business_modules = _detect_business_modules(top_level_entries)
+    detected_entry_points = _detect_entry_points(project_root, top_level_entries)
+    detected_business_modules = _detect_business_modules(top_level_entries, detected_entry_points)
 
     repo_map = _render_repo_map(project_name, project_root, top_level_entries)
     runtime_map = _render_runtime_map(detected_runtimes, top_level_entries)
@@ -133,23 +137,53 @@ def _detect_domains(entries: list[str]) -> list[str]:
     return _dedupe(domains)
 
 
-def _detect_entry_points(entries: list[str]) -> list[str]:
+def _detect_entry_points(project_root: Path, entries: list[str]) -> list[str]:
     points: list[str] = []
+    
+    # 1. Check root files
+    root_candidates = {"main.py", "app.py", "server.py", "backend.py", "api.py", "worker.py", "index.html", "index.js", "index.ts"}
     for entry in entries:
-        if entry in {"main.py", "app.py", "server.py"}:
+        if entry in root_candidates:
             points.append(entry)
-        if entry in {"routes/", "api/", "workers/"}:
+            
+    # 2. Check standard subdirectories
+    sub_dirs = {"src/", "app/", "api/", "routes/", "workers/"}
+    entry_file_patterns = {"main", "app", "server", "index", "App", "backend", "api"}
+    extensions = {".py", ".js", ".ts", ".jsx", ".tsx"}
+    
+    for sd in sub_dirs:
+        if sd in entries:
+            dir_path = project_root / sd.rstrip("/")
+            if dir_path.is_dir():
+                for child in dir_path.iterdir():
+                    if child.is_file() and child.suffix in extensions:
+                        if any(child.stem == pattern for pattern in entry_file_patterns):
+                            points.append(f"{sd}{child.name}")
+                            
+    # 3. Add directories as fallback points
+    for entry in entries:
+        if entry in {"routes/", "api/", "workers/"} and entry not in points:
             points.append(entry)
+            
     return points
 
 
-def _detect_business_modules(entries: list[str]) -> list[str]:
+def _detect_business_modules(entries: list[str], entry_points: list[str]) -> list[str]:
     modules: list[str] = []
-    patterns = {"services/", "domain/", "use_cases/", "business/", "handlers/", "workflows/", "core/", "app/", "src/"}
+    patterns = {"services/", "domain/", "use_cases/", "business/", "handlers/", "workflows/", "core/"}
     for entry in entries:
         if entry in patterns:
             modules.append(entry)
-    return modules
+
+    # Fallback: promote major entry points as business modules
+    if not modules:
+        major_patterns = {"backend.py", "app.py", "App.jsx", "App.tsx", "server.py", "api.py"}
+        for ep in entry_points:
+            name = ep.split("/")[-1]
+            if name in major_patterns:
+                modules.append(ep)
+
+    return modules if modules else ["none"]
 
 
 def _render_repo_map(project_name: str, project_root: Path, top_level_entries: list[str]) -> str:

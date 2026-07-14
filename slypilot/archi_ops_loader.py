@@ -30,6 +30,10 @@ class LoaderResult:
     warnings: list[str]
     knowledge_contract: "KnowledgeContract | None" = None
 
+    @property
+    def is_present(self) -> bool:
+        return bool(self.files or self.maps)
+
 
 @dataclass(frozen=True)
 class KnowledgeArtifact:
@@ -56,6 +60,8 @@ class KnowledgeContract:
     runtime_map: KnowledgeArtifact | None
     dependency_map: KnowledgeArtifact | None
     semantic_index: KnowledgeArtifact | None
+    interpreted_tree: KnowledgeArtifact | None
+    business_map: KnowledgeArtifact | None
     important_files: list[KnowledgeArtifact]
     selection_reason: str
 
@@ -66,15 +72,17 @@ class KnowledgeContract:
             "runtime_map": self.runtime_map.to_dict() if self.runtime_map else None,
             "dependency_map": self.dependency_map.to_dict() if self.dependency_map else None,
             "semantic_index": self.semantic_index.to_dict() if self.semantic_index else None,
+            "interpreted_tree": self.interpreted_tree.to_dict() if self.interpreted_tree else None,
+            "business_map": self.business_map.to_dict() if self.business_map else None,
             "important_files": [item.to_dict() for item in self.important_files],
             "selection_reason": self.selection_reason,
         }
 
 
 PROFILES: dict[str, ContextProfile] = {
-    "minimal": ContextProfile("minimal", 3, 200),
-    "standard": ContextProfile("standard", 8, 500),
-    "premium": ContextProfile("premium", 15, 1000),
+    "minimal": ContextProfile("minimal", 5, 1000),
+    "standard": ContextProfile("standard", 15, 5000),
+    "premium": ContextProfile("premium", 30, 15000),
 }
 
 
@@ -192,7 +200,13 @@ def _load_knowledge_contract(
     def _read(path: str, reason: str) -> KnowledgeArtifact | None:
         full_path = project_root / path
         if not full_path.exists():
-            return None
+            # Fallback to archi_ops/ directory if Documents/ARCHIOPS/ is missing
+            alt_path = path.replace("Documents/ARCHIOPS/", "archi_ops/")
+            full_path = project_root / alt_path
+            if not full_path.exists():
+                return None
+            path = alt_path
+            
         content = full_path.read_text(encoding="utf-8")
         return KnowledgeArtifact(
             path=path,
@@ -213,6 +227,14 @@ def _load_knowledge_contract(
         "Documents/ARCHIOPS/semantic-index.md",
         selected_by_path.get("Documents/ARCHIOPS/semantic-index.md", "selected"),
     )
+    interpreted_tree = _read(
+        "Documents/ARCHIOPS/interpreted-tree.md",
+        selected_by_path.get("Documents/ARCHIOPS/interpreted-tree.md", "selected"),
+    )
+    business_map = _read(
+        "Documents/ARCHIOPS/business-map.md",
+        selected_by_path.get("Documents/ARCHIOPS/business-map.md", "selected"),
+    )
 
     important_files: list[KnowledgeArtifact] = []
     for item in files:
@@ -230,6 +252,8 @@ def _load_knowledge_contract(
         runtime_map=runtime_map,
         dependency_map=dependency_map,
         semantic_index=semantic_index,
+        interpreted_tree=interpreted_tree,
+        business_map=business_map,
         important_files=important_files,
         selection_reason=selection_reason,
     )

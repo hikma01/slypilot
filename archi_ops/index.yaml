@@ -470,10 +470,37 @@
       ]
     },
     "slyaudit": {
-      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmpnubwqx29/SlyAudit",
+      "root": "/Users/hakimradi/Nextcloud/SlyProjet/SlyAudit",
       "archiops_path": "Documents/ARCHIOPS",
       "status": "initialized",
-      "files": [],
+      "files": [
+        {
+          "path": "backend.py",
+          "task_types": [
+            "debug",
+            "patch",
+            "review",
+            "docs",
+            "architecture"
+          ],
+          "weight": 95,
+          "reason": "detected_entry_point",
+          "lines": 3753
+        },
+        {
+          "path": "index.html",
+          "task_types": [
+            "debug",
+            "patch",
+            "review",
+            "docs",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "detected_entry_point",
+          "lines": 829
+        }
+      ],
       "maps": [
         {
           "path": "Documents/ARCHIOPS/project.yaml",
@@ -531,6 +558,19 @@
           ],
           "weight": 80,
           "reason": "semantic_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/interpreted-tree.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "interpreted_tree_surface",
           "lines": 40
         },
         {
@@ -816,7 +856,60 @@
       "root": "/Users/hakimradi/Nextcloud/SlyProjet/SlyCRM",
       "archiops_path": "Documents/ARCHIOPS",
       "status": "initialized",
-      "files": [],
+      "files": [
+        {
+          "path": "backend.py",
+          "task_types": [
+            "debug",
+            "patch",
+            "review",
+            "docs",
+            "architecture"
+          ],
+          "weight": 95,
+          "reason": "detected_entry_point",
+          "lines": 2362
+        },
+        {
+          "path": "index.html",
+          "task_types": [
+            "debug",
+            "patch",
+            "review",
+            "docs",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "detected_entry_point",
+          "lines": 14
+        },
+        {
+          "path": "src/main.jsx",
+          "task_types": [
+            "debug",
+            "patch",
+            "review",
+            "docs",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "detected_entry_point",
+          "lines": 9
+        },
+        {
+          "path": "src/App.jsx",
+          "task_types": [
+            "debug",
+            "patch",
+            "review",
+            "docs",
+            "architecture"
+          ],
+          "weight": 95,
+          "reason": "detected_entry_point",
+          "lines": 2965
+        }
+      ],
       "maps": [
         {
           "path": "Documents/ARCHIOPS/project.yaml",
@@ -874,6 +967,32 @@
           ],
           "weight": 80,
           "reason": "semantic_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/interpreted-tree.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "interpreted_tree_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/business-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "business_logic_surface",
           "lines": 40
         }
       ]
@@ -1011,7 +1130,7 @@
       ]
     },
     "demoproject": {
-      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmp_wv4hnye/DemoProject",
+      "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmp96fz654n/DemoProject",
       "archiops_path": "Documents/ARCHIOPS",
       "status": "initialized",
       "files": [],
@@ -1379,7 +1498,7 @@
       ]
     },
     "bootstrapdemo": {
-      "root": "/Users/hakimradi/Nextcloud/SlyProjet/tmp15o42v2u/BootstrapDemo",
+      "root": "/Users/hakimradi/Nextcloud/SlyProjet/tmpn5n8d5rd/BootstrapDemo",
       "archiops_path": "Documents/ARCHIOPS",
       "status": "initialized",
       "files": [],
@@ -1656,6 +1775,204 @@
     },
     "tmpg397hlkx": {
       "root": "/var/folders/ql/5nmzdt790j7br7dlyk0ywhgh0000gn/T/tmpg397hlkx",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/interpreted-tree.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "interpreted_tree_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/business-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "business_logic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "slykey": {
+      "root": "/Users/hakimradi/Nextcloud/SlyProjet/SlyKey",
+      "archiops_path": "Documents/ARCHIOPS",
+      "status": "initialized",
+      "files": [
+        {
+          "path": "index.html",
+          "task_types": [
+            "debug",
+            "patch",
+            "review",
+            "docs",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "detected_entry_point",
+          "lines": 3394
+        }
+      ],
+      "maps": [
+        {
+          "path": "Documents/ARCHIOPS/project.yaml",
+          "task_types": [
+            "architecture",
+            "docs"
+          ],
+          "weight": 100,
+          "reason": "project_registration",
+          "lines": 20
+        },
+        {
+          "path": "Documents/ARCHIOPS/repo-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 95,
+          "reason": "repo_structure",
+          "lines": 60
+        },
+        {
+          "path": "Documents/ARCHIOPS/runtime-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 90,
+          "reason": "runtime_boundaries",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/dependency-map.md",
+          "task_types": [
+            "debug",
+            "patch",
+            "architecture"
+          ],
+          "weight": 85,
+          "reason": "dependency_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/semantic-index.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "semantic_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/interpreted-tree.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "interpreted_tree_surface",
+          "lines": 40
+        },
+        {
+          "path": "Documents/ARCHIOPS/business-map.md",
+          "task_types": [
+            "architecture",
+            "debug",
+            "patch",
+            "review",
+            "docs"
+          ],
+          "weight": 80,
+          "reason": "business_logic_surface",
+          "lines": 40
+        }
+      ]
+    },
+    "slyscrapper": {
+      "root": "/Users/hakimradi/Nextcloud/SlyProjet/SlyScrapper",
       "archiops_path": "Documents/ARCHIOPS",
       "status": "initialized",
       "files": [],

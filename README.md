@@ -45,6 +45,14 @@ Validated pieces:
 python3 -m unittest discover
 ```
 
+### Terminal Usage
+
+```bash
+slypilot --help
+slypilot --dry-run "analyse architecture SlyPilot"
+slypilot --live-run "explique problème login Hermes"
+```
+
 ### Dry Run
 
 ```bash

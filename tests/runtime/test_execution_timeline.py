@@ -55,19 +55,48 @@ class ExecutionTimelineTests(TestCase):
         self.assertEqual(event.details, "Done")
 
     def test_timeline_renderer(self) -> None:
-        renderer = TimelineRenderer()
-        event = ExecutionEvent("TEST", "Test Title", EventStatus.SUCCESS, details="Test Details")
         buffer = StringIO()
-        with redirect_stdout(buffer):
-            renderer.render_event(event)
-
+        renderer = TimelineRenderer(output_func=buffer.write, verbose=True)
+        event = ExecutionEvent("TEST", "Test Title", EventStatus.SUCCESS, details="Test Details")
+        renderer.render_event(event)
         self.assertIn("✓ Test Title : Test Details", buffer.getvalue())
 
     def test_timeline_renderer_running(self) -> None:
-        renderer = TimelineRenderer()
-        event = ExecutionEvent("TEST", "Test Title", EventStatus.RUNNING)
         buffer = StringIO()
-        with redirect_stdout(buffer):
-            renderer.render_event(event)
-
+        renderer = TimelineRenderer(output_func=buffer.write, verbose=True)
+        event = ExecutionEvent("TEST", "Test Title", EventStatus.RUNNING)
+        renderer.render_event(event)
         self.assertIn("⏳ Test Title", buffer.getvalue())
+
+    def test_timeline_get_summary(self) -> None:
+        timeline = ExecutionTimeline()
+        timeline.emit("PROJECT_DETECTED", "Détection", status=EventStatus.SUCCESS)
+        timeline.emit("CARTOGRAPHY_LOADED", "Carto", status=EventStatus.SUCCESS)
+        
+        summary = timeline.get_summary()
+        self.assertEqual(summary, "Projet détecté • Cartographie chargée")
+
+    def test_timeline_renderer_compact_vs_verbose(self) -> None:
+        # Verbose mode
+        buffer = StringIO()
+        verbose_renderer = TimelineRenderer(output_func=buffer.write, verbose=True)
+        event = ExecutionEvent("TEST", "Test Title", EventStatus.SUCCESS)
+        verbose_renderer.render_event(event)
+        verbose_renderer.render_compact_summary(ExecutionTimeline())
+        
+        output = buffer.getvalue()
+        self.assertIn("✓ Test Title", output)
+        self.assertNotIn("Travail effectué", output)
+
+        # Compact mode
+        buffer = StringIO()
+        compact_renderer = TimelineRenderer(output_func=buffer.write, verbose=False)
+        timeline = ExecutionTimeline()
+        timeline.emit("PROJECT_DETECTED", "Détection", status=EventStatus.SUCCESS)
+        event = ExecutionEvent("TEST", "Test Title", EventStatus.SUCCESS)
+        compact_renderer.render_event(event)
+        compact_renderer.render_compact_summary(timeline)
+        
+        output = buffer.getvalue().lower()
+        self.assertNotIn("✓ test title", output)
+        self.assertIn("travail effectué : projet détecté", output)

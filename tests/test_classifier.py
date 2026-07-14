@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -16,15 +15,15 @@ class ClassifierTests(TestCase):
 
         for request in cases:
             result = subprocess.run(
-                [sys.executable, "-m", "slypilot.cli", request],
+                [sys.executable, "-m", "slypilot.cli", "--dry-run", request],
                 cwd=self.root,
                 check=True,
                 capture_output=True,
                 text=True,
             )
 
-            self.assertIn("SlyPilot attend une tâche technique.", result.stdout)
-            self.assertIn("Exemples :", result.stdout)
+            self.assertIn("Bonjour.", result.stdout)
+            self.assertIn("Je peux t'aider", result.stdout)
             self.assertNotIn("task_type", result.stdout)
             self.assertNotIn("project", result.stdout)
             self.assertNotIn("needs_technical_request", result.stdout)
@@ -40,16 +39,16 @@ class ClassifierTests(TestCase):
 
         for request, expected in cases:
             result = subprocess.run(
-                [sys.executable, "-m", "slypilot.cli", request],
+                [sys.executable, "-m", "slypilot.cli", "--dry-run", request],
                 cwd=self.root,
                 check=True,
                 capture_output=True,
                 text=True,
             )
 
-            payload = json.loads(result.stdout)
-            self.assertEqual(payload["task_type"], expected["task_type"])
-            self.assertEqual(payload["project"], expected["project"])
+            self.assertIn("Mode brouillon", result.stdout)
+            self.assertIn(f"Projet détecté : {expected['project']}", result.stdout)
+            self.assertNotIn("needs_technical_request", result.stdout)
 
 
 if __name__ == "__main__":

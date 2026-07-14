@@ -51,7 +51,7 @@ def initialize_project_with_index(project_root: Path, index_path: Path) -> InitR
     if created_memory:
         created_files.append(memory_path)
 
-    warnings = _update_global_index(project_name, project_root, index_path)
+    warnings = _update_global_index(project_name, project_root, index_path, cartography)
 
     return InitResult(
         project_name=project_name,
@@ -83,7 +83,7 @@ def _write_file(path: Path, content: str) -> Path:
     return path
 
 
-def _update_global_index(project_name: str, project_root: Path, index_path: Path) -> list[str]:
+def _update_global_index(project_name: str, project_root: Path, index_path: Path, cartography: Any) -> list[str]:
     warnings: list[str] = []
     try:
         index_data = json.loads(index_path.read_text(encoding="utf-8"))
@@ -91,12 +91,27 @@ def _update_global_index(project_name: str, project_root: Path, index_path: Path
         warnings.append(f"ARCHI OPS index missing: {index_path}")
         return warnings
 
+    # Identify important files from cartography
+    important_files = []
+    for entry in cartography.detected_entry_points:
+        if entry.endswith("/"):
+            continue
+        full_path = project_root / entry
+        if full_path.is_file():
+            important_files.append({
+                "path": entry,
+                "task_types": ["debug", "patch", "review", "docs", "architecture"],
+                "weight": 95 if any(name in entry for name in {"backend.py", "main.py", "app.py", "server.py", "App.jsx", "App.tsx"}) else 90,
+                "reason": "detected_entry_point",
+                "lines": len(full_path.read_text(encoding="utf-8").splitlines()),
+            })
+
     projects = index_data.setdefault("projects", {})
     projects[project_name] = {
         "root": str(project_root),
         "archiops_path": str(ARCHIOPS_RELATIVE_PATH),
         "status": "initialized",
-        "files": [],
+        "files": important_files,
         "maps": [
             {
                 "path": "Documents/ARCHIOPS/project.yaml",

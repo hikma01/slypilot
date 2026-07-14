@@ -8,7 +8,8 @@ from pathlib import Path
 
 
 PATH_PATTERN = re.compile(
-    r"(?P<path>(?:~|\.{1,2}|/|[A-Za-z]:\\\\|\\\\)[^\s\"']+)"
+    r'(?P<quoted>["\'])(?P<qpath>[^"\']+)(?P=quoted)'
+    r'|(?P<unquoted>(?:[A-Za-z]:[\\/]|[~./\\]+)(?:[^\s"\'\\]|\\.)*)'
 )
 
 
@@ -24,12 +25,23 @@ def detect_paths(raw_input: str, cwd: Path | None = None) -> list[DetectedPath]:
     results: list[DetectedPath] = []
     seen: set[str] = set()
     for match in PATH_PATTERN.finditer(raw_input):
-        raw_path = match.group("path").rstrip(".,;")
-        normalized = _normalize_path(raw_path, cwd)
+        if match.group("quoted"):
+            raw_path = match.group("qpath")
+        else:
+            raw_path = match.group("unquoted")
+        
+        # Clean up trailing punctuation only for unquoted paths
+        if not match.group("quoted"):
+            raw_path = raw_path.rstrip(".,;")
+            
+        # Unescape spaces if present
+        processed_path = raw_path.replace("\\ ", " ")
+        
+        normalized = _normalize_path(processed_path, cwd)
         if normalized in seen:
             continue
         seen.add(normalized)
-        results.append(DetectedPath(raw_path=raw_path, normalized_path=normalized))
+        results.append(DetectedPath(raw_path=processed_path, normalized_path=normalized))
     return results
 
 

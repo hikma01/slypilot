@@ -23,3 +23,11 @@
 - Proof: three runs executed in rapid succession produced the same `task_YYYYMMDD_HHMMSS.md` name.
 - Fix: include microseconds in the task identifier.
 - Prevention rule: any file-backed dry-run artifact must have collision-resistant naming from the start.
+
+## 2026-06-05 - Project memory and coordinator contract drift
+
+- Symptom: full test discovery failed after ProjectMemory integration, with coordinator tests crashing on missing `project_name`, `project_path`, `coherence`, `guard`, and mismatched resolution sources or skill labels.
+- Root cause: the coordinator started assuming enriched packet fields and a single project-resolution path, while tests and CLI flows still relied on legacy contracts, dry-run packet generation, explicit path precedence, and archiops-index-backed project lookup.
+- Proof: `python3 -m unittest discover` reported failures in project resolution, coordinator trace fields, skill routing, and dry-run packet generation until `CoordinatorResult`, `ResourceIntakeResult`, `project_resolver`, and `coordinate_request()` were aligned with the expected contracts.
+- Fix: add persistent `ProjectMemory`, keep packet translation in the main path, restore path/project resolution precedence, expose `coherence` and `guard`, and make the coordinator trace reflect the real runtime flags.
+- Prevention rule: whenever a memory or translation layer is added, keep the public dataclass and CLI contracts backward-compatible, and validate both targeted tests and full discovery before considering the change stable.

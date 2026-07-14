@@ -53,6 +53,26 @@ class ProjectResolverTests(TestCase):
         self.assertEqual(resolved.resolution_source, "cwd")
         self.assertFalse(resolved.fallback_used)
 
+    def test_absolute_path_request_does_not_confuse_home_directory_as_project(self) -> None:
+        classification = Classification(
+            task_type="debug",
+            project_hint=None,
+            provider_hint=None,
+            environment_hint=None,
+        )
+
+        resolved = resolve_project(
+            classification,
+            self.root,
+            raw_request="Analyse mon projet /Users/hakimradi/Nextcloud/SlyProjet/SlyAudit",
+            current_working_directory=Path.home(),
+            resource_project_name="slyaudit",
+        )
+
+        self.assertEqual(resolved.name, "slyaudit")
+        self.assertEqual(resolved.resolution_source, "explicit_path")
+        self.assertFalse(resolved.mismatch_detected)
+
     def test_explicit_barberexpert_wins(self) -> None:
         classification = Classification(
             task_type="debug",
@@ -93,19 +113,23 @@ class ProjectResolverTests(TestCase):
 
     def test_cli_dry_run_in_barberexpert_uses_contextual_project(self) -> None:
         result = subprocess.run(
-            [str(self.root / "bin" / "slypilot"), "--dry-run", "analyse ce projet si tu trouves des bugs"],
+            [str(self.root / "bin" / "slypilot"), "--dry-run", "--verbose", "analyse ce projet si tu trouves des bugs"],
             cwd=self.barberexpert_root,
             check=True,
             capture_output=True,
             text=True,
         )
 
-        self.assertIn("- project: barberexpert", result.stdout)
-        self.assertIn("## PROJECT CONTRACT", result.stdout)
+        self.assertIn("Projet détecté : barberexpert", result.stdout)
+        self.assertIn("PACKET SUMMARY", result.stdout)
         self.assertIn("project_yaml_loaded: true", result.stdout)
         self.assertIn("project_yaml_path: /Users/hakimradi/Nextcloud/SlyProjet/BarberExpert/Documents/ARCHIOPS/project.yaml", result.stdout)
         self.assertIn("project_contract_injected: true", result.stdout)
-        self.assertIn("selected_maps:", result.stdout)
+        self.assertIn("dry_run          : true", result.stdout)
+        self.assertIn("live_run         : false", result.stdout)
+        self.assertIn("provider_called  : false", result.stdout)
+        self.assertIn("Mode brouillon", result.stdout)
+        self.assertIn("Packet généré", result.stdout)
         self.assertIn("Documents/ARCHIOPS/runtime-map.md", result.stdout)
         self.assertIn("Documents/ARCHIOPS/dependency-map.md", result.stdout)
         self.assertIn("Documents/ARCHIOPS/semantic-index.md", result.stdout)
@@ -119,29 +143,31 @@ class ProjectResolverTests(TestCase):
             (repo_root / "src").mkdir()
 
             result = subprocess.run(
-                [str(self.root / "bin" / "slypilot"), "--dry-run", "analyse ce projet si tu trouves des bugs"],
+                [str(self.root / "bin" / "slypilot"), "--dry-run", "--verbose", "analyse ce projet si tu trouves des bugs"],
                 cwd=repo_root,
                 check=True,
                 capture_output=True,
                 text=True,
             )
 
+            self.assertIn("Avertissements :", result.stdout)
             self.assertIn("ARCHI OPS project contract missing:", result.stdout)
             self.assertIn("project_yaml_loaded: false", result.stdout)
             self.assertIn("project_contract_injected: false", result.stdout)
 
     def test_ambiguous_request_blocks_confirmation(self) -> None:
         result = subprocess.run(
-            [str(self.root / "bin" / "slypilot"), "--dry-run", "analyse SlyScan et BarberExpert"],
+            [str(self.root / "bin" / "slypilot"), "--dry-run", "--verbose", "analyse SlyScan et BarberExpert"],
             cwd=self.barberexpert_root,
             capture_output=True,
             text=True,
         )
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("SlyPilot cannot resolve this request unambiguously.", result.stdout)
-        self.assertIn("requested_project:", result.stdout)
-        self.assertIn("resolved_project:", result.stdout)
+        self.assertIn("J'ai détecté une ressource locale", result.stdout)
+        self.assertIn("Alternatives :", result.stdout)
+        self.assertIn("Choix conseillé :", result.stdout)
+        self.assertIn("1. analyser le projet", result.stdout)
 
 
 if __name__ == "__main__":

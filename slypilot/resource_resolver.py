@@ -41,6 +41,35 @@ class ResourceIntakeResult:
     project_root: str | None = None
     resource_trace: dict[str, object] | None = None
 
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "raw_input": self.raw_input,
+            "detected_paths": list(self.detected_paths),
+            "normalized_paths": list(self.normalized_paths),
+            "existing_paths": list(self.existing_paths),
+            "missing_paths": list(self.missing_paths),
+            "blocked_paths": list(self.blocked_paths),
+            "resource_types": list(self.resource_types),
+            "selected_resource": self.selected_resource,
+            "intake_status": self.intake_status,
+            "resources": [
+                {
+                    "raw_path": descriptor.raw_path,
+                    "normalized_path": descriptor.normalized_path,
+                    "exists": descriptor.exists,
+                    "resource_type": descriptor.resource_type,
+                    "detail": descriptor.detail,
+                    "policy_status": descriptor.policy_status,
+                    "selected": descriptor.selected,
+                }
+                for descriptor in self.resources
+            ],
+            "warnings": list(self.warnings),
+            "project_name": self.project_name,
+            "project_root": self.project_root,
+            "resource_trace": self.resource_trace,
+        }
+
 
 def resolve_resources(raw_input: str, cwd: Path) -> ResourceIntakeResult:
     detected = detect_paths(raw_input, cwd)

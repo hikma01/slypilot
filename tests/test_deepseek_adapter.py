@@ -107,9 +107,9 @@ class DeepSeekAdapterTests(TestCase):
                         exit_code = slypilot.cli.main(["corrige bug upload SlyScan", "--live-run"])
 
             self.assertEqual(exit_code, 0)
-            self.assertIn("SLYPILOT LIVE RUN", stdout.getvalue())
-            self.assertIn("Provider response:", stdout.getvalue())
-            self.assertIn("response_tokens:", stdout.getvalue())
+            self.assertIn("Mode exécution", stdout.getvalue())
+            self.assertIn("Réponse fournisseur :", stdout.getvalue())
+            self.assertIn("Métriques :", stdout.getvalue())
         finally:
             if history_path.exists():
                 history_path.write_text(before, encoding="utf-8")

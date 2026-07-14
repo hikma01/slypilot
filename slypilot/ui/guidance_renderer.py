@@ -230,6 +230,9 @@ def render_ambiguity_prompt(project_name: str, project_path: str, include_header
             "2. initialiser ARCHI OPS",
             "3. afficher l’état du projet",
             "",
+            "Choix conseillé :",
+            "1",
+            "",
             "Réponds par 1, 2 ou 3.",
         ],
         include_header=include_header
@@ -293,6 +296,7 @@ def render_analysis_restitution(
     selected_files = _as_list(packet_metadata.get("selected_files", []))
     selected_maps = _as_list(packet_metadata.get("selected_maps", []))
     knowledge_contract = packet_metadata.get("knowledge_contract")
+    project_memory = packet_metadata.get("project_memory")
 
     if not verbose:
         interpreted = diagnostic
@@ -341,6 +345,10 @@ def render_analysis_restitution(
             "Pourquoi :",
             *(_pedagogical_lines(why, seen_terms)),
         ]
+        if isinstance(project_memory, dict):
+            memory_lines = _memory_lines(project_memory, seen_terms)
+            if memory_lines:
+                lines.extend(["", "Mémoire projet :", *memory_lines])
         return render_slypilot_message("SlyPilot", lines, include_header=include_header)
 
     selected_maps = _as_list(packet_metadata.get("selected_maps", []))
@@ -387,6 +395,10 @@ def render_analysis_restitution(
                     knowledge_lines.append(f"- {item}")
         else:
             knowledge_lines.append("none")
+    if isinstance(project_memory, dict):
+        memory_lines = _memory_lines(project_memory, seen_terms)
+        if memory_lines:
+            knowledge_lines.extend(["", "Mémoire projet", *memory_lines])
     lines = [
         f"Projet : {project_name}",
         "",
@@ -421,6 +433,49 @@ def render_analysis_restitution(
         *(knowledge_lines if knowledge_lines else ["none"]),
     ]
     return render_slypilot_message("SlyPilot", lines, include_header=include_header)
+
+
+def _memory_lines(project_memory: dict[str, object], seen_terms: set[str]) -> list[str]:
+    lines: list[str] = []
+    technologies = _as_list(project_memory.get("technologies", []))
+    domains = _as_list(project_memory.get("domains", []))
+    loaded_maps = project_memory.get("loaded_maps", {})
+    important_files = _as_list(project_memory.get("important_files", []))
+    entry_points = _as_list(project_memory.get("entry_points", []))
+    previous_findings = _as_list(project_memory.get("previous_findings", []))
+    risks = _as_list(project_memory.get("risks", []))
+    architecture_summary = str(project_memory.get("architecture_summary", "") or "").strip()
+    business_summary = str(project_memory.get("business_summary", "") or "").strip()
+    runtime_summary = str(project_memory.get("runtime_summary", "") or "").strip()
+    active_recommendation = str(project_memory.get("active_recommendation", "") or "").strip()
+
+    if technologies:
+        lines.append("- Technologies mémorisées : " + ", ".join(_pedagogical_label(item, seen_terms) for item in technologies[:8]))
+    if domains:
+        lines.append("- Domaines mémorisés : " + ", ".join(_pedagogical_label(item, seen_terms) for item in domains[:8]))
+    if architecture_summary:
+        lines.append(f"- Architecture mémorisée : {architecture_summary}")
+    if business_summary:
+        lines.append(f"- Métier mémorisé : {business_summary}")
+    if runtime_summary:
+        lines.append(f"- Runtime mémorisé : {runtime_summary}")
+    if isinstance(loaded_maps, dict) and loaded_maps:
+        lines.append("- Cartes persistées : " + ", ".join(sorted(str(key) for key in loaded_maps.keys())))
+    if important_files:
+        lines.append("- Fichiers importants : " + ", ".join(_pedagogical_label(item, seen_terms) for item in important_files[:5]))
+    if entry_points:
+        lines.append("- Points d'entrée : " + ", ".join(_pedagogical_label(item, seen_terms) for item in entry_points[:5]))
+    if previous_findings:
+        lines.append("- Constats déjà retenus :")
+        lines.extend([f"  - {item}" for item in previous_findings[:5]])
+    if risks:
+        lines.append("- Risques persistés :")
+        lines.extend([f"  - {item}" for item in risks[:5]])
+    if active_recommendation:
+        lines.append(f"- Recommandation active : {active_recommendation}")
+    if project_memory.get("last_analysis_timestamp"):
+        lines.append(f"- Dernière analyse : {project_memory.get('last_analysis_timestamp')}")
+    return lines
 
 
 def render_analysis_discovery(project_name: str, task_type: str, include_header: bool = True) -> str:
@@ -493,11 +548,29 @@ def render_post_diagnostic_files(project_name: str, packet_metadata: dict[str, o
             if path:
                 label = _pedagogical_label(path, seen_terms)
                 lines.append(f"- {label} : {reason}" if reason else f"- {label}")
+        
+        # Logic detection for confidence
+        has_business = False
+        if isinstance(knowledge_contract, dict):
+            biz = _section_content(knowledge_contract.get("business_map", ""))
+            if "PRIMARY BUSINESS MODULES" in biz and "- none" not in biz:
+                has_business = True
+
+        if has_business:
+            limit_lines = [
+                "- la lecture couvre le cœur métier identifié.",
+                "- une exploration profonde peut révéler des détails de mise en œuvre supplémentaires.",
+            ]
+        else:
+            limit_lines = [
+                "- la lecture reste centrée sur les fichiers visibles et ne couvre pas encore tout le métier.",
+            ]
+
         lines.extend(
             [
                 "",
                 "Limite :",
-                "- la lecture reste centrée sur les fichiers visibles et ne couvre pas encore tout le métier.",
+                *limit_lines,
             ]
         )
     else:
@@ -560,6 +633,38 @@ def render_post_diagnostic_map(packet_metadata: dict[str, object], include_heade
         architecture_lines.append("├── structure non précisée")
     architecture_lines.append("└── Code métier")
 
+    # Logic detection for confidence
+    has_business = False
+    if isinstance(knowledge_contract, dict):
+        biz = _section_content(knowledge_contract.get("business_map", ""))
+        if "PRIMARY BUSINESS MODULES" in biz and "- none" not in biz:
+            has_business = True
+        elif knowledge_contract.get("important_files"):
+            has_business = True
+
+    meaning_lines = [
+        "- la carte permet de situer rapidement les points d'entrée utiles",
+    ]
+    if has_business:
+        meaning_lines.append("- elle identifie clairement les modules où réside la logique métier")
+    else:
+        meaning_lines.append("- elle reste encore trop générale pour identifier le métier avec certitude")
+
+    missing_lines = []
+    if has_business:
+        missing_lines.extend([
+            "- exploration détaillée des flux internes",
+            "- validation des interactions entre services",
+        ])
+        recommendation = "approfondir l'analyse des modules identifiés pour valider la logique métier"
+    else:
+        missing_lines.extend([
+            "- cartographie initiale encore incomplète",
+            "- aucun fichier métier principal n'a encore été isolé",
+            "- Contexte borné : il ne permet pas encore d'affirmer où se trouve le cœur fonctionnel",
+        ])
+        recommendation = "explorer l'arborescence métier pour trouver les modules principaux et les services"
+
     lines = [
         "Fichiers ARCHI OPS utilisés :",
         *(source_lines if source_lines else ["- aucun fichier ARCHI OPS exploitable"]),
@@ -582,8 +687,7 @@ def render_post_diagnostic_map(packet_metadata: dict[str, object], include_heade
             *architecture_lines,
             "",
             "Ce que cela signifie :",
-            "- la carte permet de situer rapidement les points d'entrée utiles",
-            "- elle reste encore trop générale pour identifier le métier avec certitude",
+            *meaning_lines,
             "",
             "Pourquoi c'est important :",
             "- ces éléments indiquent comment le projet démarre",
@@ -591,26 +695,45 @@ def render_post_diagnostic_map(packet_metadata: dict[str, object], include_heade
             "- ils servent de base pour relier les points d'entrée aux services critiques",
             "",
             "Ce qui manque encore :",
-            "- cartographie initiale encore incomplète",
-            "- aucun fichier métier principal n'a encore été isolé",
-            "- Contexte borné : il ne permet pas encore d'affirmer où se trouve le cœur fonctionnel",
+            *missing_lines,
             "",
             "Ma recommandation :",
-            "explorer l'arborescence métier pour trouver les modules principaux et les services",
+            recommendation,
         ]
     )
     return render_slypilot_message("SlyPilot", lines, include_header=include_header)
 
 
 def render_post_diagnostic_risks(packet_metadata: dict[str, object], include_header: bool = False) -> str:
+    knowledge_contract = packet_metadata.get("knowledge_contract")
     selection_reasons = _as_list(packet_metadata.get("selection_reasons", []))
-    lines = [
-        "Zones à risque visibles :",
-        "",
-        "- cartographie encore initiale",
-        "- aucun fichier métier principal identifié",
-        "- Contexte borné encore trop court pour conclure sur la zone critique",
-    ]
+    
+    # Logic detection for confidence
+    has_business = False
+    if isinstance(knowledge_contract, dict):
+        biz = _section_content(knowledge_contract.get("business_map", ""))
+        if "PRIMARY BUSINESS MODULES" in biz and "- none" not in biz:
+            has_business = True
+        elif knowledge_contract.get("important_files"):
+            has_business = True
+
+    if has_business:
+        lines = [
+            "Zones à risque visibles :",
+            "",
+            "- complexité potentielle des modules métier identifiés",
+            "- interactions entre services à valider",
+            "- besoin d'une exploration profonde pour confirmer les flux de données",
+        ]
+    else:
+        lines = [
+            "Zones à risque visibles :",
+            "",
+            "- cartographie encore initiale",
+            "- aucun fichier métier principal identifié",
+            "- Contexte borné encore trop court pour conclure sur la zone critique",
+        ]
+
     if selection_reasons:
         lines.extend(["", "Indices observés :"])
         lines.extend(f"- {item}" for item in selection_reasons[:5])

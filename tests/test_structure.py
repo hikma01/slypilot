@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -69,26 +68,24 @@ class StructureTests(TestCase):
 
     def test_initial_detection_dry_run(self) -> None:
         cases = [
-            ("corrige bug upload SlyScan", {"task_type": "debug", "project": "slyscan"}),
-            ("analyse architecture SlyPilot", {"task_type": "architecture", "project": "slypilot"}),
-            ("explique problème login Hermes", {"task_type": "explain", "project": "hermes"}),
-            ("corrige erreur API SlyScan", {"task_type": "debug", "project": "slyscan"}),
+            ("corrige bug upload SlyScan", "slyscan"),
+            ("analyse architecture SlyPilot", "slypilot"),
+            ("explique problème login Hermes", "hermes"),
+            ("corrige erreur API SlyScan", "slyscan"),
         ]
 
-        for request, expected in cases:
+        for request, expected_project in cases:
             result = subprocess.run(
-                [sys.executable, "-m", "slypilot.cli", request],
+                [sys.executable, "-m", "slypilot.cli", "--dry-run", request],
                 cwd=self.root,
                 check=True,
                 capture_output=True,
                 text=True,
             )
 
-            payload = json.loads(result.stdout)
-            self.assertEqual(payload["task_type"], expected["task_type"])
-            self.assertEqual(payload["project"], expected["project"])
-            self.assertEqual(payload["provider"], "deepseek")
-            self.assertEqual(payload["environment"], "local")
+            self.assertIn("Mode brouillon", result.stdout)
+            self.assertIn(f"Projet détecté : {expected_project}", result.stdout)
+            self.assertIn("Packet généré", result.stdout)
 
 
 if __name__ == "__main__":

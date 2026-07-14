@@ -159,10 +159,12 @@ def coordinate_request(
         preparation = prepare_project(bootstrap_target)
         if preparation.preparation_status in {"success", "already_ready"}:
             project_path = preparation.project_path
+    
+    # Use the technical task_type from classification for ArchiOps loading
     archi_ops = load_archi_ops_context(
         repository_root,
         project.name,
-        intent_fusion.detected_intent,
+        intent.task_type,
         "standard",
         Path(project_path) if project_path else None
     )

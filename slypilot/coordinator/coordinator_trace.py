@@ -6,6 +6,20 @@ from dataclasses import dataclass, asdict
 
 
 @dataclass(frozen=True)
+class AdvisoryTrace:
+    advisory: str
+    diagnosis: str
+    capability_level: str
+    recommended_action: str
+    alternatives: list[str]
+    recommendation_reason: str
+    confidence: str
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class CoordinatorTrace:
     intent: str
     project: str
@@ -14,6 +28,13 @@ class CoordinatorTrace:
     archiops: str
     decision: str
     reason: str
+    dry_run: bool = False
+    live_run: bool = False
+    provider_called: bool = False
+    intent_trace: dict[str, object] | None = None
+    resource_trace: dict[str, object] | None = None
+    advisory: AdvisoryTrace | None = None
+    skill: str = ""
 
     def to_dict(self) -> dict[str, str]:
         return asdict(self)

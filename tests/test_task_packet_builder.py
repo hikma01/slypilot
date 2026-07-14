@@ -27,15 +27,12 @@ class TaskPacketBuilderTests(TestCase):
         )
 
         output = result.stdout
-        self.assertIn("SLYPILOT DRY RUN", output)
-        self.assertIn("Detection:", output)
-        self.assertIn("Generated Packet:", output)
-        self.assertIn("--- TASK PACKET ---", output)
+        self.assertIn("Mode brouillon", output)
+        self.assertIn("Projet détecté :", output)
+        self.assertIn("Packet généré", output)
 
-        packet_line = next(
-            line for line in output.splitlines() if line.startswith("- slypilot/packets/generated/task_")
-        )
-        packet_rel_path = packet_line[2:].strip()
+        packet_line = next(line for line in output.splitlines() if line.startswith("- Packet généré :"))
+        packet_rel_path = packet_line.split(":", 1)[1].strip()
         packet_path = self.root / packet_rel_path
         self.assertTrue(packet_path.exists())
 
@@ -72,7 +69,7 @@ class TaskPacketBuilderTests(TestCase):
                 capture_output=True,
                 text=True,
             )
-            self.assertIn("Warnings:", result.stdout)
+            self.assertIn("Avertissements :", result.stdout)
             self.assertIn("ARCHI OPS index missing", result.stdout)
         finally:
             archi_ops_index.write_text(backup.read_text(encoding="utf-8"), encoding="utf-8")

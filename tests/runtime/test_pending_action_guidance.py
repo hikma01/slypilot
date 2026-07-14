@@ -23,7 +23,7 @@ class PendingActionGuidanceTests(TestCase):
                 (),
                 {
                     "intent": type("I", (), {"classification": type("C", (), {"task_type": "debug"})()})(),
-                    "project": type("P", (), {"name": "slyaudit", "requested_project": "slyaudit", "resolution_source": "explicit_request"})(),
+                    "project": type("P", (), {"name": "slyaudit", "requested_project": "slyaudit", "resolution_source": "explicit_request", "status": "success"})(),
                     "resource": type(
                         "R",
                         (),

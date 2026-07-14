@@ -9,27 +9,33 @@ from pathlib import Path
 from slypilot.adapters.deepseek_adapter import DeepSeekAdapterError, run_deepseek_live
 from slypilot.coordinator import coordinate_request
 from slypilot.archiops_init import initialize_project
+from slypilot.classifier import classify_intake
 from slypilot.intake import build_intake
-from slypilot.runtime import ConversationLoop
+from slypilot.runtime.conversation_loop import ConversationLoop
 from slypilot.runtime.session_registry import SessionRegistry
 from slypilot.runtime.session_resume import resume_last_session, resume_session
 from slypilot.runtime.session_retention import prune_sessions
-from slypilot.ui import (
-    render_ambiguous_clarification,
+from slypilot.runtime.execution_events import EventStatus
+from slypilot.runtime.execution_timeline import ExecutionTimeline
+from slypilot.ui.console_renderer import (
     render_banner,
     render_error_message,
     render_init_message,
     render_packet_summary,
-    render_slypilot_message,
-    render_coordinator_trace,
-    render_resource_trace,
+)
+from slypilot.ui.chat_renderer import render_slypilot_message
+from slypilot.ui.trace_renderer import render_coordinator_trace, render_resource_trace
+from slypilot.ui.guidance_renderer import (
     render_greeting_prompt,
     render_init_required_prompt,
     render_archiops_explanation,
     render_ambiguity_prompt,
     render_path_missing,
     render_sensitive_path,
+    render_path_error,
 )
+from slypilot.ui.timeline_renderer import TimelineRenderer
+from slypilot.ui.status_bar import StatusBar
 from slypilot.task_packet_builder import append_history
 
 
@@ -210,6 +216,18 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error("a request is required")
             args.request = request
 
+    verbose_mode = getattr(args, "verbose", False) or getattr(args, "debug", False)
+    timeline_renderer = TimelineRenderer(verbose=verbose_mode)
+    status_bar = StatusBar()
+    
+    def _on_event(event: "ExecutionEvent") -> None:
+        status_bar.update(event.title.lower())
+        timeline_renderer.render_event(event)
+
+    timeline = ExecutionTimeline(on_event=_on_event)
+
+    status_bar.start("détection du projet")
+    timeline.emit("PROJECT_DETECTED", "Détection du projet", status=EventStatus.RUNNING)
     intake = build_intake(args.request, root)
 
     coordinated = coordinate_request(
@@ -219,15 +237,36 @@ def main(argv: list[str] | None = None) -> int:
         dry_run=args.dry_run,
         live_run=args.live_run,
     )
-    classification = coordinated.intent.classification
+    classification = getattr(coordinated.intent, "classification", None) or classify_intake(intake, root)
     project = coordinated.project
-    verbose_mode = getattr(args, "verbose", False) or getattr(args, "debug", False)
+    resource = coordinated.resource
+    decision = coordinated.decision
+
+    if project.name not in {"unknown", "none"}:
+        timeline.emit("PROJECT_DETECTED", "Projet détecté", status=EventStatus.SUCCESS, details=project.name)
+    else:
+        reason = coordinated.block_reason or decision.reason or "Projet inconnu"
+        timeline.emit("PROJECT_DETECTED", "Détection du projet", status=EventStatus.FAILED, details=reason)
+        selected_resource = resource.selected_resource if isinstance(resource.selected_resource, dict) else {}
+        if " " in args.request and not selected_resource.get("path"):
+            status_bar.stop()
+            print(render_path_error())
+
+    # Événement de garde de sécurité
+    if not decision.allowed:
+        timeline.emit("GUARD_CHECKED", "Contrôle de sécurité", status=EventStatus.FAILED, details=decision.reason)
+        status_bar.stop()
+        timeline_renderer.render_compact_summary(timeline)
+    else:
+        timeline.emit("GUARD_CHECKED", "Contrôle de sécurité", status=EventStatus.SUCCESS)
 
     if classification.task_type == "unknown":
+        status_bar.stop()
         print(render_greeting_prompt())
         return 0
 
     if not coordinated.decision.allowed:
+        status_bar.stop()
         selected_resource = coordinated.resource.selected_resource or {}
         selected_path = selected_resource.get("path", "") if isinstance(selected_resource, dict) else ""
         selected_type = selected_resource.get("type", "") if isinstance(selected_resource, dict) else ""
@@ -249,12 +288,33 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         packet = coordinated.packet
         assert packet is not None
+        
+        knowledge = packet.metadata.get("knowledge_contract")
+        if isinstance(knowledge, dict):
+            map_keys = ["repo_map", "runtime_map", "dependency_map", "semantic_index"]
+            map_count = sum(1 for k in map_keys if knowledge.get(k) is not None)
+        else:
+            map_count = packet.metadata.get("selected_maps_count", 0)
+            
+        line_count = packet.metadata.get("selected_lines_count", 0)
+        tokens = packet.metadata.get("estimated_packet_tokens", 0)
+
+        timeline.emit("CARTOGRAPHY_LOADED", f"{map_count} sections de connaissance chargées", status=EventStatus.SUCCESS)
+        timeline.emit("CONTEXT_READY", f"{line_count} lignes sélectionnées", status=EventStatus.SUCCESS)
+        timeline.emit("DIAGNOSTIC_COMPLETED", f"Diagnostic généré ({tokens} tokens)", status=EventStatus.SUCCESS)
+        
+        status_bar.stop()
+        timeline_renderer.render_compact_summary(timeline)
+
         append_history(
             root / "slypilot" / "storage" / "history.jsonl",
             packet,
             prompt=intake.raw_request,
         )
-        print(render_slypilot_message("Mode brouillon", [f"Projet détecté : {project.name}", f"Statut : {coordinated.resource.intake_status}", f"Action recommandée :", f"- Packet généré : {packet.packet_path.relative_to(root)}"]))
+        from slypilot.ui.chat_renderer import render_slypilot_header
+        print(render_slypilot_header())
+        print("")
+        print(render_slypilot_message("Mode brouillon", [f"Projet détecté : {project.name}", f"Statut : {coordinated.resource.intake_status}", f"Action recommandée :", f"- Packet généré : {packet.packet_path.relative_to(root)}"], include_header=False))
         _print_warnings(packet.warnings)
         if verbose_mode:
             print()
@@ -263,14 +323,17 @@ def main(argv: list[str] | None = None) -> int:
             print(render_coordinator_trace(coordinated.trace))
             print()
             print(render_packet_summary(packet.metadata))
-        else:
-            print()
-            print("Actions recommandées :")
-            print(f"- Packet généré : {packet.packet_path.relative_to(root)}")
     elif args.live_run:
         packet = coordinated.packet
         assert packet is not None
-        print(render_slypilot_message("Mode exécution", [f"Projet détecté : {project.name}", f"Statut : {coordinated.resource.intake_status}", f"Action recommandée :", f"- Packet prêt : {packet.packet_path.relative_to(root)}"]))
+        
+        # In live run, we need to stop the bar before external calls to providers if they might take time
+        # or keep it and update it. For now, stop before final summary.
+        status_bar.stop()
+        from slypilot.ui.chat_renderer import render_slypilot_header
+        print(render_slypilot_header())
+        print("")
+        print(render_slypilot_message("Mode exécution", [f"Projet détecté : {project.name}", f"Statut : {coordinated.resource.intake_status}", f"Action recommandée :", f"- Packet prêt : {packet.packet_path.relative_to(root)}"], include_header=False))
         _print_warnings(packet.warnings)
         if verbose_mode:
             print()
@@ -304,6 +367,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- model: {response.model}")
         print(f"- response_tokens: {response.response_tokens}")
     else:
+        status_bar.stop()
         print(render_slypilot_message("Résumé", [f"Projet détecté : {project.name}", f"Type de tâche : {classification.task_type}", "Mode : interactif"]))
     return 0
 

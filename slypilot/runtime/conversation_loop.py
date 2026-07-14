@@ -279,7 +279,7 @@ class ConversationLoop:
                 )
                 continue
 
-            if self.pending_action and self.pending_action.action_type in {"init_required", "init_archiops", "clarification", "choose_next_action"}:
+            if self.pending_action and self.pending_action.action_type in {"init_required", "init_archiops", "clarification", "choose_next_action", "post_diagnostic_next_step", "analysis_discovery", "analysis_plan"}:
                 execution = self.pending_executor.resolve(raw, self.pending_action.to_dict())
                 if execution.handled and self._handle_pending_action_execution(execution):
                     continue
@@ -441,6 +441,28 @@ class ConversationLoop:
 
         if action == "cancel":
             self.output(render_cancel_action(include_header=not self._header_sent_this_turn))
+            self.pending_action = None
+            self.session = self.session_manager.update(pending_action=None)
+            self._sync_registry(status="active")
+            return True
+
+        if action in {"analyze_files", "show_map", "find_risks", "stop_here", "show_cartography"}:
+            if action == "stop_here":
+                self.output(render_post_diagnostic_stop())
+            else:
+                active_analysis = self.session.active_analysis
+                if isinstance(active_analysis, dict):
+                    metadata = active_analysis.get("packet_metadata") or {}
+                    if action == "analyze_files":
+                        self.output(render_post_diagnostic_files(project_name, metadata, include_header=not self._header_sent_this_turn))
+                    elif action in {"show_map", "show_cartography"}:
+                        self.output(render_post_diagnostic_map(metadata, include_header=not self._header_sent_this_turn))
+                    elif action == "find_risks":
+                        self.output(render_post_diagnostic_risks(metadata, include_header=not self._header_sent_this_turn))
+                else:
+                    # Fallback if no active analysis metadata
+                    self._output_assistant("SlyPilot", ["Je ne retrouve pas les données de l'analyse en cours."])
+
             self.pending_action = None
             self.session = self.session_manager.update(pending_action=None)
             self._sync_registry(status="active")

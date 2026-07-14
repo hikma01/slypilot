@@ -1,0 +1,10 @@
+# RUNTIME MAP
+
+## DETECTED RUNTIMES
+
+- python
+
+## ENTRYPOINT CANDIDATES
+
+- docs/
+- tests/

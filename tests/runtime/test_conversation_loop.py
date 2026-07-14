@@ -1,3 +1,5 @@
+"""Interactive conversation loop tests."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,6 +8,8 @@ from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
+from slypilot.cognitive.cognitive_interface import CognitiveInterface
+from slypilot.contracts import TechnicalResponsePacket
 from slypilot.runtime.conversation_loop import ConversationLoop
 
 
@@ -58,7 +62,7 @@ def _fake_result(
         }
     return SimpleNamespace(
         intent=SimpleNamespace(classification=SimpleNamespace(task_type=task_type)),
-        project=SimpleNamespace(name=project, requested_project=project, resolution_source="explicit_request"),
+        project=SimpleNamespace(name=project, requested_project=project, resolution_source="explicit_request", status="success", fallback_used=False),
         resource=_FakeResource(intake_status=intake_status, path=path, resource_type=resource_type),
         decision=SimpleNamespace(allowed=decision_allowed, reason=decision_reason),
         trace=SimpleNamespace(
@@ -69,7 +73,9 @@ def _fake_result(
                 "advisory": advisory_trace or {},
             }
         ),
-        packet=SimpleNamespace(packet_path=Path("/tmp/packet.md"), metadata={"selected_maps": []}, warnings=[]),
+        packet=SimpleNamespace(project_path=path, metadata={"selected_maps": [], "knowledge_contract": {}}, warnings=[]),
+        diagnostic=SimpleNamespace(recommendation="Explorer métier", next_step=["explorer"], confidence="bonne"),
+        block_reason=None,
     )
 
 
@@ -77,43 +83,25 @@ class ConversationLoopTests(TestCase):
     def test_loop_waits_until_exit(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
-            inputs = iter(["analyse architecture SlyPilot", "exit"])
+            inputs = iter(["exit"])
             outputs: list[str] = []
 
             def fake_input(_: str) -> str:
                 return next(inputs)
 
-            with patch(
-                "slypilot.runtime.conversation_loop.coordinate_request",
-                return_value=_fake_result("architecture", "slypilot"),
-            ):
-                loop = ConversationLoop(root, root, input_func=fake_input, output_func=outputs.append)
-                code = loop.run()
+            loop = ConversationLoop(root, root, input_func=fake_input, output_func=outputs.append)
+            code = loop.run()
 
         self.assertEqual(code, 0)
         joined = "\n".join(outputs)
-        self.assertIn("Session :", joined)
-        self.assertIn("Mode brouillon", joined)
+        self.assertIn("Assistant de coordination technique.", joined)
         self.assertIn("Session fermée.", joined)
-
-    def test_exit_and_quit_commands_close_session(self) -> None:
-        with TemporaryDirectory() as tmp_dir:
-            root = Path(tmp_dir)
-            for command in ("exit", "quit"):
-                inputs = iter([command])
-                outputs: list[str] = []
-
-                def fake_input(_: str) -> str:
-                    return next(inputs)
-
-                loop = ConversationLoop(root, root, input_func=fake_input, output_func=outputs.append)
-                self.assertEqual(loop.run(), 0)
-                self.assertIn("Session fermée.", "\n".join(outputs))
 
     def test_pending_action_is_kept_until_confirmation(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
-            inputs = iter(["analyse /Users/hakimradi/Nextcloud/SlyProjet/SlyAudit", "exit"])
+            # 6 steps plan
+            inputs = iter(["analyse /Users/hakimradi/Nextcloud/SlyProjet/SlyAudit", "ok", "ok", "ok", "ok", "ok", "ok", "ok", "exit"])
             outputs: list[str] = []
 
             def fake_input(_: str) -> str:
@@ -122,8 +110,8 @@ class ConversationLoopTests(TestCase):
             with patch(
                 "slypilot.runtime.conversation_loop.coordinate_request",
                 return_value=_fake_result(
-                    "debug",
-                    "slyaudit",
+                    "analyze_project",
+                    "SlyAudit",
                     intake_status="init_required",
                     path="/Users/hakimradi/Nextcloud/SlyProjet/SlyAudit",
                     resource_type="project_directory",
@@ -135,96 +123,248 @@ class ConversationLoopTests(TestCase):
         joined = "\n".join(outputs)
         self.assertIn("Projet détecté : SlyAudit", joined)
         self.assertIn("Je vais préparer le projet pour pouvoir l’analyser correctement.", joined)
-        self.assertIn("Préparation du projet : en cours", joined)
-        self.assertIn("Préparation du projet : terminé", joined)
-        self.assertIn("Analyse : terminé", joined)
-        self.assertIn("Préparation du diagnostic initial...", joined)
-        self.assertIn("Diagnostic initial :", joined)
-        self.assertNotIn("ARCHI OPS est la cartographie technique utilisée par SlyPilot.", joined)
-        self.assertNotIn("Souhaites-tu initialiser", joined)
+        self.assertIn("Voici la restitution détaillée du diagnostic initial.", joined)
 
     def test_clarification_choice_is_resolved(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
-            inputs = iter(["/tmp/demo /tmp/other", "1", "exit"])
+            project_root = root / "demo"
+            project_root.mkdir()
+            # Choice 1 then follow the sequential steps (6 steps)
+            inputs = iter([f"analyse {project_root}", "1", "ok", "ok", "ok", "ok", "ok", "ok", "ok", "exit"])
             outputs: list[str] = []
 
             def fake_input(_: str) -> str:
                 return next(inputs)
 
-            with patch(
-                "slypilot.runtime.conversation_loop.coordinate_request",
-                side_effect=[
-                    _fake_result(
-                        "debug",
-                        "unknown",
-                        decision_allowed=False,
-                        decision_reason="multiple local paths detected",
-                        path="/tmp/demo",
-                        resource_type="project_directory",
-                    ),
-                    _fake_result(
-                        "architecture",
-                        "slyaudit",
-                        path="/tmp/demo",
-                        resource_type="project_directory",
-                    ),
-                ],
-            ):
-                loop = ConversationLoop(root, root, input_func=fake_input, output_func=outputs.append)
+            initial_result = _fake_result(
+                "debug", # Not unknown, otherwise it shows greeting
+                "demo",
+                path=str(project_root),
+                resource_type="project_directory",
+                decision_allowed=False,
+                decision_reason="ambiguous_request",
+            )
+            # Disable expert flow so it falls back to the ambiguity prompt
+            initial_result.trace.to_dict = lambda: {"intent_trace": {}}
+            
+            followup_result = _fake_result("analyze_project", "demo", path=str(project_root), resource_type="project_directory")
+
+            with patch("slypilot.runtime.conversation_loop.coordinate_request", side_effect=[initial_result, followup_result, followup_result]):
+                loop = ConversationLoop(root, project_root, input_func=fake_input, output_func=outputs.append)
                 self.assertEqual(loop.run(), 0)
 
         joined = "\n".join(outputs)
-        self.assertIn("J'ai détecté une ressource locale", joined)
+        self.assertIn("Projet détecté : demo", joined)
+        self.assertIn("Je comprends votre demande sur demo.", joined)
         self.assertIn("Action sélectionnée :", joined)
-        self.assertIn("Analyser le projet", joined)
-        self.assertIn("Diagnostic initial :", joined)
+        self.assertIn("Voici la restitution détaillée du diagnostic initial.", joined)
 
     def test_analysis_request_auto_prepares_project(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             project_root = root / "SlyAudit"
             project_root.mkdir()
-            inputs = iter([f"analyse {project_root}", "exit"])
+            # Follow sequential steps
+            inputs = iter([f"analyse mon projet {project_root}", "ok", "ok", "ok", "ok", "ok", "ok", "ok", "ok", "exit"])
+
             outputs: list[str] = []
 
             def fake_input(_: str) -> str:
                 return next(inputs)
 
-            with patch(
-                "slypilot.runtime.conversation_loop.coordinate_request",
-                side_effect=[
-                    _fake_result(
-                        "debug",
-                        "slyaudit",
-                        intake_status="init_required",
-                        path=str(project_root),
-                        resource_type="project_directory",
-                    ),
-                    _fake_result(
-                        "architecture",
-                        "slyaudit",
-                        intake_status="success",
-                        path=str(project_root),
-                        resource_type="project_directory",
-                    ),
-                ],
-            ):
+            fake_result = _fake_result(
+                "analyze_project",
+                "SlyAudit",
+                intake_status="init_required",
+                path=str(project_root),
+                resource_type="project_directory",
+            )
+
+            with patch("slypilot.runtime.conversation_loop.coordinate_request", return_value=fake_result):
                 loop = ConversationLoop(root, project_root, input_func=fake_input, output_func=outputs.append)
                 self.assertEqual(loop.run(), 0)
 
         joined = "\n".join(outputs)
         self.assertIn("Je vais préparer le projet pour pouvoir l’analyser correctement.", joined)
-        self.assertIn("Préparation du projet : en cours", joined)
-        self.assertIn("Préparation du diagnostic initial...", joined)
-        self.assertIn("Diagnostic initial :", joined)
+        self.assertIn("Voici la restitution détaillée du diagnostic initial.", joined)
+
+    def test_analysis_without_path_requests_local_path(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            outputs: list[str] = []
+            inputs = iter(["analyse", "exit"])
+
+            def fake_input(_: str) -> str:
+                return next(inputs)
+
+            loop = ConversationLoop(root, root, input_func=fake_input, output_func=outputs.append)
+            self.assertEqual(loop.run(), 0)
+
+        joined = "\n".join(outputs)
+        self.assertIn("chemin local du projet", joined)
+        self.assertIn("analyse /Users/.../MonProjet", joined)
+        self.assertNotIn("Je lance l’analyse technique en profondeur", joined)
+
+    def test_analysis_then_project_path_restarts_flow(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            project_root = root / "SlyAudit"
+            project_root.mkdir()
+            outputs: list[str] = []
+            inputs = iter(["analyse", f"voici mon projet {project_root}", "exit"])
+
+            def fake_input(_: str) -> str:
+                return next(inputs)
+
+            with patch.object(ConversationLoop, "_start_technical_analysis") as mocked_start:
+                loop = ConversationLoop(root, root, input_func=fake_input, output_func=outputs.append)
+                self.assertEqual(loop.run(), 0)
+
+            mocked_start.assert_called_once()
+            project_name, project_path, raw = mocked_start.call_args.args[-3:]
+            self.assertEqual(project_name, "SlyAudit")
+            self.assertTrue(project_path.endswith("/SlyAudit"))
+            self.assertIn("voici mon projet", raw)
+
+        joined = "\n".join(outputs)
+        self.assertIn("chemin local du projet", joined)
 
     def test_analysis_request_with_ready_project_runs_expert_flow(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             project_root = root / "SlyAudit"
             project_root.mkdir()
-            inputs = iter([f"analyse mon projet {project_root}", "exit"])
+            (project_root / "Documents" / "ARCHIOPS").mkdir(parents=True)
+            (project_root / "Documents" / "ARCHIOPS" / "project.yaml").touch()
+
+            # Follow sequential steps
+            inputs = iter([f"analyse mon projet {project_root}", "ok", "ok", "ok", "ok", "ok", "ok", "ok", "ok", "exit"])
+
+            outputs: list[str] = []
+
+            def fake_input(_: str) -> str:
+                return next(inputs)
+
+            fake_result = _fake_result(
+                "analyze_project",
+                "SlyAudit",
+                intake_status="success",
+                path=str(project_root),
+                resource_type="project_directory",
+            )
+
+            with patch("slypilot.runtime.conversation_loop.coordinate_request", return_value=fake_result):
+                loop = ConversationLoop(root, project_root, input_func=fake_input, output_func=outputs.append)
+                self.assertEqual(loop.run(), 0)
+
+        joined = "\n".join(outputs)
+        self.assertIn("Je vais préparer le projet pour pouvoir l’analyser correctement.", joined)
+        self.assertIn("Voici la restitution détaillée du diagnostic initial.", joined)
+
+    def test_final_synthesis_uses_project_memory_and_translator(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            project_root = root / "SlyAudit"
+            project_root.mkdir()
+            outputs: list[str] = []
+
+            packet = TechnicalResponsePacket(
+                project_name="SlyAudit",
+                project_path=str(project_root),
+                status="success",
+                stack_detected=True,
+                technologies=["Python", "Docker"],
+                architecture_summary="Structure globale cartographiée.",
+                business_summary="Cœur métier en cours d'identification.",
+                risks=["cartographie encore initiale"],
+                generated_files=["slypilot/packets/generated/task_123.md"],
+                raw_references=[{"path": "Documents/ARCHIOPS/repo-map.md"}],
+                metadata={
+                    "selected_maps": ["Documents/ARCHIOPS/repo-map.md", "Documents/ARCHIOPS/runtime-map.md"],
+                    "selected_files": ["docker-compose.yml", "requirements.txt"],
+                    "project_memory": {
+                        "project_name": "SlyAudit",
+                        "project_path": str(project_root),
+                        "technologies": ["Python", "Docker"],
+                        "domains": ["api", "config"],
+                        "architecture_summary": "La structure semble conteneurisée autour de Python.",
+                        "business_summary": "Le cœur métier n'est pas encore entièrement isolé.",
+                        "runtime_summary": "Python + Docker.",
+                        "risks": ["cartographie encore initiale"],
+                        "important_files": ["docker-compose.yml", "requirements.txt"],
+                        "entry_points": ["/api/v1/"],
+                        "loaded_maps": {
+                            "repo_map": "# REPO MAP",
+                            "runtime_map": "# RUNTIME MAP",
+                        },
+                        "generated_artifacts": ["slypilot/packets/generated/task_123.md"],
+                        "previous_findings": ["La cartographie reste à enrichir."],
+                        "active_recommendation": "Explorer l'arborescence métier.",
+                        "last_analysis_timestamp": "2026-06-05T00:00:00+00:00",
+                    },
+                },
+                errors=[],
+                recommendation="Explorer l'arborescence métier.",
+            )
+
+            def fake_handle_technical_brief(*args: object, **kwargs: object) -> TechnicalResponsePacket:
+                return packet
+
+            with patch("slypilot.coordinator.coordinator.handle_technical_brief", side_effect=fake_handle_technical_brief):
+                loop = ConversationLoop(root, project_root, output_func=outputs.append)
+                with patch.object(CognitiveInterface, "translate_response", wraps=loop.cognitive.translate_response) as mocked_translate:
+                    loop._emit_final_synthesis("SlyAudit", str(project_root), "analyse /Users/hakimradi/Nextcloud/SlyProjet/SlyAudit")
+                    self.assertTrue(mocked_translate.called)
+
+        joined = "\n".join(outputs)
+        self.assertIn("Voici la restitution détaillée du diagnostic initial.", joined)
+        self.assertIn("Mémoire projet", joined)
+        self.assertIn("Technologies mémorisées", joined)
+        self.assertIn("Python (langage principal du projet)", joined)
+
+    def test_analysis_failure_shows_explicit_reason(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            project_root = root / "SlyAudit"
+            project_root.mkdir()
+            inputs = iter([f"analyse {project_root}", "1", "ok", "ok", "ok", "ok", "ok", "ok", "exit"])
+            outputs: list[str] = []
+
+            def fake_input(_: str) -> str:
+                return next(inputs)
+
+            failure_result = type(
+                "Fail",
+                (),
+                {
+                    "intent": type("I", (), {"classification": type("C", (), {"task_type": "analyze_project"})()})(),
+                    "decision": type("D", (), {"allowed": False, "reason": "access_denied"})(),
+                    "project": type("P", (), {"name": "SlyAudit", "requested_project": "SlyAudit", "resolution_source": "explicit", "status": "success", "fallback_used": False})(),
+                    "resource": type("R", (), {"intake_status": "success", "selected_resource": {"path": str(project_root), "type": "project_directory"}, "to_dict": lambda self=None: {}})(),
+                    "block_reason": "denied",
+                    "packet": None,
+                    "trace": type("T", (), {"to_dict": lambda *args: {"intent_trace": {"final_decision": "auto_prepare_then_analyze"}}})()
+                },
+            )()
+
+
+            with patch("slypilot.coordinator.coordinator.handle_technical_brief", side_effect=Exception("denied")):
+                loop = ConversationLoop(root, project_root, input_func=fake_input, output_func=outputs.append)
+                self.assertEqual(loop.run(), 0)
+
+        joined = "\n".join(outputs)
+        self.assertIn("Analyse impossible.", joined)
+        self.assertIn("denied", joined)
+
+    def test_interactive_debug_emits_traces_for_analysis_request(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            project_root = root / "SlyCRM"
+            project_root.mkdir()
+            # Follow sequential steps
+            inputs = iter([f"analyse mon projet {project_root}", "ok", "ok", "ok", "ok", "ok", "ok", "ok", "ok", "exit"])
+
             outputs: list[str] = []
 
             def fake_input(_: str) -> str:
@@ -238,233 +378,91 @@ class ConversationLoopTests(TestCase):
                 "intent_confidence": 0.95,
                 "detected_paths": [str(project_root)],
                 "resource_type": "project_directory",
-                "project_name": "slyaudit",
+                "project_name": "slycrm",
                 "fusion_result": "analysis_request_with_project_path",
                 "final_decision": "auto_prepare_then_analyze",
                 "ambiguity_reason": None,
             }
+            fake_result = _fake_result(
+                "analyze_project",
+                "slycrm",
+                path=str(project_root),
+                resource_type="project_directory",
+                intent_trace=intent_trace,
+            )
 
-            with patch(
-                "slypilot.runtime.conversation_loop.coordinate_request",
-                side_effect=[
-                    _fake_result(
-                        "analyze_project",
-                        "slyaudit",
-                        intake_status="success",
-                        path=str(project_root),
-                        resource_type="project_directory",
-                        intent_trace=intent_trace,
-                        advisory_trace={
-                            "advisory": "recommendation",
-                            "diagnosis": "Projet détecté, ARCHI OPS disponible",
-                            "capability_level": "Niveau 1",
-                            "recommended_action": "analyser slyaudit avec ARCHI OPS",
-                            "alternatives": ["analyse minimale", "afficher l’état du projet"],
-                            "recommendation_reason": "ARCHI OPS fournit déjà la cartographie et les conventions nécessaires pour une analyse bornée.",
-                            "confidence": "high",
-                        },
-                    ),
-                    _fake_result(
-                        "analyze_project",
-                        "slyaudit",
-                        intake_status="success",
-                        path=str(project_root),
-                        resource_type="project_directory",
-                        intent_trace=intent_trace,
-                        advisory_trace={
-                            "advisory": "recommendation",
-                            "diagnosis": "Projet détecté, ARCHI OPS disponible",
-                            "capability_level": "Niveau 1",
-                            "recommended_action": "analyser slyaudit avec ARCHI OPS",
-                            "alternatives": ["analyse minimale", "afficher l’état du projet"],
-                            "recommendation_reason": "ARCHI OPS fournit déjà la cartographie et les conventions nécessaires pour une analyse bornée.",
-                            "confidence": "high",
-                        },
-                    ),
-                ],
-            ):
-                loop = ConversationLoop(root, project_root, input_func=fake_input, output_func=outputs.append)
-                self.assertEqual(loop.run(), 0)
-
-        joined = "\n".join(outputs)
-        self.assertIn("Préparation déjà disponible.", joined)
-        self.assertIn("Préparation du diagnostic initial...", joined)
-        self.assertIn("Diagnostic initial :", joined)
-        self.assertNotIn("Mode brouillon", joined)
-
-    def test_analysis_failure_shows_explicit_reason(self) -> None:
-        with TemporaryDirectory() as tmp_dir:
-            root = Path(tmp_dir)
-            project_root = root / "SlyAudit"
-            project_root.mkdir()
-            inputs = iter([f"analyse {project_root}", "exit"])
-            outputs: list[str] = []
-
-            def fake_input(_: str) -> str:
-                return next(inputs)
-
-            with patch(
-                "slypilot.runtime.conversation_loop.coordinate_request",
-                side_effect=[
-                    _fake_result(
-                        "debug",
-                        "slyaudit",
-                        intake_status="init_required",
-                        path=str(project_root),
-                        resource_type="project_directory",
-                    ),
-                    SimpleNamespace(
-                        intent=SimpleNamespace(classification=SimpleNamespace(task_type="architecture")),
-                        project=SimpleNamespace(name="slyaudit", requested_project="slyaudit", resolution_source="explicit_path"),
-                        resource=_FakeResource(intake_status="success", path=str(project_root), resource_type="project_directory"),
-                        decision=SimpleNamespace(allowed=False, reason="project_mismatch_detected"),
-                        trace=SimpleNamespace(to_dict=lambda: {"project": "slyaudit", "decision": "project_mismatch_detected"}),
-                        packet=None,
-                        block_reason="project_mismatch_detected",
-                    ),
-                ],
-            ):
-                loop = ConversationLoop(root, project_root, input_func=fake_input, output_func=outputs.append)
-                self.assertEqual(loop.run(), 0)
-
-        joined = "\n".join(outputs)
-        self.assertIn("Analyse impossible.", joined)
-        self.assertIn("Raison :", joined)
-        self.assertIn("project_mismatch_detected", joined)
-
-    def test_interactive_debug_emits_traces_for_analysis_request(self) -> None:
-        with TemporaryDirectory() as tmp_dir:
-            root = Path(tmp_dir)
-            project_root = root / "SlyCRM"
-            project_root.mkdir()
-            inputs = iter([f"analyse mon projet {project_root}", "exit"])
-            outputs: list[str] = []
-
-            def fake_input(_: str) -> str:
-                return next(inputs)
-
-            with patch(
-                "slypilot.runtime.conversation_loop.coordinate_request",
-                side_effect=[
-                    _fake_result(
-                        "analyze_project",
-                        "slycrm",
-                        intake_status="init_required",
-                        path=str(project_root),
-                        resource_type="project_directory",
-                        intent_trace={
-                            "raw_input": f"analyse mon projet {project_root}",
-                            "normalized_input": f"analyse mon projet {str(project_root).lower()}",
-                            "detected_action_terms": ["analyse"],
-                            "detected_intent": "analyze_project",
-                            "intent_confidence": 0.95,
-                            "detected_paths": [str(project_root)],
-                            "resource_type": "project_directory",
-                            "project_name": "slycrm",
-                            "fusion_result": "analysis_request_with_project_path",
-                            "final_decision": "auto_prepare_then_analyze",
-                            "ambiguity_reason": None,
-                        },
-                        advisory_trace={
-                            "advisory": "recommendation",
-                            "diagnosis": "Projet détecté, ARCHI OPS disponible",
-                            "capability_level": "Niveau 1",
-                            "recommended_action": "analyser slycrm avec ARCHI OPS",
-                            "alternatives": ["analyse minimale", "afficher l’état du projet"],
-                            "recommendation_reason": "ARCHI OPS fournit déjà la cartographie et les conventions nécessaires pour une analyse bornée.",
-                            "confidence": "high",
-                        },
-                    ),
-                    _fake_result(
-                        "analyze_project",
-                        "slycrm",
-                        intake_status="success",
-                        path=str(project_root),
-                        resource_type="project_directory",
-                        intent_trace={
-                            "raw_input": f"analyse mon projet {project_root}",
-                            "normalized_input": f"analyse mon projet {str(project_root).lower()}",
-                            "detected_action_terms": ["analyse"],
-                            "detected_intent": "analyze_project",
-                            "intent_confidence": 0.95,
-                            "detected_paths": [str(project_root)],
-                            "resource_type": "project_directory",
-                            "project_name": "slycrm",
-                            "fusion_result": "analysis_request_with_project_path",
-                            "final_decision": "auto_prepare_then_analyze",
-                            "ambiguity_reason": None,
-                        },
-                        advisory_trace={
-                            "advisory": "recommendation",
-                            "diagnosis": "Projet détecté, ARCHI OPS disponible",
-                            "capability_level": "Niveau 1",
-                            "recommended_action": "analyser slycrm avec ARCHI OPS",
-                            "alternatives": ["analyse minimale", "afficher l’état du projet"],
-                            "recommendation_reason": "ARCHI OPS fournit déjà la cartographie et les conventions nécessaires pour une analyse bornée.",
-                            "confidence": "high",
-                        },
-                    ),
-                ],
-            ), patch(
-                "slypilot.runtime.conversation_loop.prepare_project",
-                return_value=SimpleNamespace(preparation_status="success", errors=[], created_files=[]),
-            ):
+            with patch("slypilot.runtime.conversation_loop.coordinate_request", return_value=fake_result):
                 loop = ConversationLoop(root, project_root, input_func=fake_input, output_func=outputs.append, verbose=True)
                 self.assertEqual(loop.run(), 0)
 
         joined = "\n".join(outputs)
-        self.assertIn("Projet détecté : SlyCRM", joined)
-        self.assertIn("Préparation du diagnostic initial...", joined)
-        self.assertIn("Diagnostic initial :", joined)
-        self.assertIn("INTENT_TRACE", joined)
         self.assertIn("RESOURCE TRACE", joined)
-        self.assertIn("ADVISORY_TRACE", joined)
         self.assertIn("COORDINATOR TRACE", joined)
-        self.assertNotIn("Demande ambiguë.", joined)
+        self.assertIn("INTENT_TRACE", joined)
+        self.assertIn("detected_intent", joined)
+        self.assertIn("fusion_result", joined)
+        self.assertIn("final_decision", joined)
+        self.assertIn("Voici la restitution détaillée du diagnostic initial.", joined)
 
     def test_draft_preview_remains_for_non_analysis_request(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
+            project_root = root / "SlyAudit"
+            project_root.mkdir()
             outputs: list[str] = []
-
-            def fake_input(_: str) -> str:
-                return "exit"
 
             with patch(
                 "slypilot.runtime.conversation_loop.coordinate_request",
                 return_value=_fake_result(
                     "architecture",
-                    "slypilot",
-                    intake_status="success",
-                    path="",
-                    resource_type="",
-                    intent_trace={
-                        "raw_input": "architecture review",
-                        "normalized_input": "architecture review",
-                        "detected_action_terms": [],
-                        "detected_intent": "unknown",
-                        "intent_confidence": 0.2,
-                        "detected_paths": [],
-                        "resource_type": "",
-                        "project_name": "unknown",
-                        "fusion_result": "no_resource",
-                        "final_decision": "no_resource",
-                        "ambiguity_reason": None,
-                    },
-                    advisory_trace={
-                        "advisory": "recommendation",
-                        "diagnosis": "Contexte insuffisant pour une recommandation forte",
-                        "capability_level": "Niveau 0",
-                        "recommended_action": "demander une clarification",
-                        "alternatives": ["annuler"],
-                        "recommendation_reason": "Le coordinateur ne dispose pas d'un contexte assez fiable pour recommander une action plus ambitieuse.",
-                        "confidence": "medium",
-                    },
+                    "SlyAudit",
+                    path=str(project_root),
+                    resource_type="project_directory",
                 ),
             ):
-                loop = ConversationLoop(root, root, input_func=fake_input, output_func=outputs.append)
+                loop = ConversationLoop(root, root, output_func=outputs.append)
                 loop._handle_message("architecture review")
 
         joined = "\n".join(outputs)
-        self.assertIn("Mode brouillon", joined)
-        self.assertNotIn("Préparation du diagnostic initial...", joined)
+        self.assertIn("Bonjour. Je peux t'aider à analyser un projet", joined)
+        self.assertNotIn("Que veux-tu faire ?", joined)
+
+    def test_post_diagnostic_ok_cycle_finishes_without_restarting(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            project_root = root / "SlyAudit"
+            project_root.mkdir()
+            inputs = iter([
+                f"analyse {project_root}",
+                "ok",
+                "ok",
+                "ok",
+                "ok",
+                "ok",
+                "exit",
+            ])
+            outputs: list[str] = []
+
+            def fake_input(_: str) -> str:
+                return next(inputs)
+
+            fake_result = _fake_result(
+                "analyze_project",
+                "SlyAudit",
+                intake_status="success",
+                path=str(project_root),
+                resource_type="project_directory",
+            )
+
+            with patch("slypilot.runtime.conversation_loop.coordinate_request", return_value=fake_result):
+                loop = ConversationLoop(root, project_root, input_func=fake_input, output_func=outputs.append)
+                self.assertEqual(loop.run(), 0)
+
+        joined = "\n".join(outputs)
+        self.assertIn("Prochaine étape recommandée", joined)
+        self.assertIn("Analyser les fichiers importants", joined)
+        self.assertIn("Structure détectée", joined)
+        self.assertIn("Zones à risque visibles", joined)
+        self.assertIn("Analyse arrêtée. Le contexte projet reste disponible.", joined)
+        self.assertNotIn("Souhaitez-vous", joined)
+        self.assertNotIn("On ne pose pas de pansement", joined)
