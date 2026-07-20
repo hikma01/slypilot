@@ -37,6 +37,14 @@ Validated pieces:
 - simple append-only history
 - offline controlled benchmark for packet value
 
+## Authority
+
+The authoritative registry for autonomous software assets is:
+
+- [SlyGouv/PROJECT_REGISTRY.md](../SlyGouv/PROJECT_REGISTRY.md) v1.0 / `QUALIFIED_BASELINE`
+
+This repository is an operational surface only. It does not redefine the patrimony registry.
+
 ## Official Commands
 
 ### Tests
