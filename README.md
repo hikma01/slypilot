@@ -37,6 +37,8 @@ Validated pieces:
 - simple append-only history
 - offline controlled benchmark for packet value
 
+SlyPilot is also the pilot project for validating new SlyMethod execution artifacts before wider rollout.
+
 ## Authority
 
 The authoritative registry for autonomous software assets is:
@@ -89,6 +91,8 @@ V1 does not include:
 ## Next Step
 
 Future phases should only expand the system if there is field evidence that a new capability is required.
+
+For method evolution, SlyPilot serves as the cross-validation project after SlyCV.
 
 ## Contract Note
 

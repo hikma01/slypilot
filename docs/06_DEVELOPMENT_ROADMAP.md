@@ -11,4 +11,5 @@ This roadmap remains a local operational plan. It does not redefine the patrimon
 3. Define the Task Packet schema.
 4. Add one provider adapter only when the packet is stable.
 5. Keep history simple: JSONL prompt, packet, response capture.
-6. Freeze V1 and keep later changes evidence-driven only.
+6. Validate SlyMethod execution artifacts on the pilot path after SlyCV.
+7. Freeze V1 and keep later changes evidence-driven only.
