@@ -1,4 +1,14 @@
-# SlyPilot
+# SlyPilot — Orientation structurante du 2026-11-27
+
+**Statut :** `TRANSVERSE_PILLAR_CANDIDATE / NOT_ACTIVE`. SlyPilot est le **candidat pour le pilier de coordination transverse de SlyAdjoint**. SlyDev est **conservé comme outil spécialisé de développement**, avec sa navigation et ses modules M01–M06 inchangés.
+
+**Point de départ de refondation :** [Contrat V0 et reset logique](docs/44_TRANSVERSE_PILLAR_REFOUNDATION_V0.md) · [RFC SlyMethod de vision](https://github.com/hikma01/slymethod/blob/main/04_Architecture/RFC/RFC-SLYMETHOD-SYSTEME-AGENTIQUE-001.md).
+
+L'historique ci-dessous reste documentaire et **n'est pas une preuve de capacité opérationnelle du nouveau pilier**. Aucun ancien module n'est implicitement admis dans la baseline V0.
+
+---
+
+## Description du SlyPilot historique (LEGACY)
 
 SlyPilot is a deterministic technical coordinator designed to reduce context before sending a task to an AI provider.
 
