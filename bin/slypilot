@@ -1,5 +1,0 @@
-#!/bin/bash
-set -euo pipefail
-
-export PYTHONPATH="/Users/hakimradi/Nextcloud/SlyProjet/SlyPilot${PYTHONPATH:+:$PYTHONPATH}"
-exec python3 -m slypilot.cli "$@"

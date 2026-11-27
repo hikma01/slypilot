@@ -1,9 +1,0 @@
-cases:
-  - id: architecture_slypilot
-    prompt: analyse architecture SlyPilot
-  - id: hermes_login
-    prompt: explique problème login Hermes
-  - id: slyscan_upload
-    prompt: corrige bug upload SlyScan
-  - id: hermes_security
-    prompt: audit sécurité Hermes

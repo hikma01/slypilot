@@ -1,2 +1,0 @@
-"""Task packet package placeholder."""
-
