@@ -53,7 +53,7 @@ SlyPilot is also the pilot project for validating new SlyMethod execution artifa
 
 The authoritative registry for autonomous software assets is:
 
-- [SlyGouv/PROJECT_REGISTRY.md](../SlyGouv/PROJECT_REGISTRY.md) v1.0 / `QUALIFIED_BASELINE`
+- `SlyGouv/PROJECT_REGISTRY.md` (référence legacy externe au dépôt, source GitHub à qualifier) v1.0 / `QUALIFIED_BASELINE`
 
 This repository is an operational surface only. It does not redefine the patrimony registry.
 
