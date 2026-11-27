@@ -27,7 +27,7 @@ Le dépôt contient une V1 Python, ARCHI OPS, Task Packets, benchmarks et traces
 
 La séquence de refondation à autoriser séparément :
 
-1. Fig­er le SHA historique et l'inventaire ; préserver l'historique Git, les tests, preuves et benchmarks.
+1. Figer le SHA historique et l'inventaire ; préserver l'historique Git, les tests, preuves et benchmarks.
 2. Créer une **branche/worktree de refondation isolé** hors synchronisation Nextcloud ; aucune mutation du `main` actif avant QA.
 3. Classer chaque composant : `REUSE_AFTER_TEST`, `REWRITE`, `ARCHIVE`, `DISCARD_FROM_NEW_RUNTIME`. Le moteur `coordinator/` et les Task Packets sont candidats d'audit ; les imports de `runtime/` requièrent correction/refonte.
 4. Construire un seul flux utile, avec tests réels, négatifs, indépendance QA et rollback démontrés.
